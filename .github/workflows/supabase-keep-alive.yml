@@ -1,0 +1,21 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "0 4 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping the Supabase-backed endpoint
+        shell: bash
+        run: |
+          response="$(curl --fail --silent --show-error --max-time 30 https://pitrustweb.com/api/keep-alive)"
+          test "$response" = '{"status":"alive"}'
+          printf 'Keep-alive succeeded: %s\n' "$response"

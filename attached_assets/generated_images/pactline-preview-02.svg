@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1500" viewBox="0 0 750 1500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08100B"/><stop offset="1" stop-color="#050806"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#13E46A"/><stop offset="1" stop-color="#00B94F"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#0C9E52" stop-opacity=".23"/><stop offset="1" stop-color="#0C9E52" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M72 0H0V72" fill="none" stroke="#82A88C" stroke-opacity=".055" stroke-width="1"/></pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000" flood-opacity=".35"/></filter>
+  </defs>
+  <rect width="750" height="1500" fill="url(#bg)"/><rect width="750" height="1500" fill="url(#grid)"/><circle cx="620" cy="220" r="360" fill="url(#glow)"/>
+  <g font-family="DejaVu Sans, Arial, sans-serif">
+    <rect x="48" y="62" width="48" height="48" rx="15" fill="url(#green)"/>
+    <path d="M72 73l12 4v10c0 9-6 14-12 18-6-4-12-9-12-18V77z" fill="none" stroke="#05230F" stroke-width="3" stroke-linejoin="round"/><path d="m67 87 4 4 7-8" fill="none" stroke="#05230F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="110" y="95" fill="#F0F5F1" font-size="25" font-weight="700" letter-spacing=".4">PACTLINE</text>
+    <rect x="552" y="68" width="150" height="38" rx="19" fill="#151D17" stroke="#2B3F31"/><circle cx="575" cy="87" r="11" fill="#F6A83B"/><text x="575" y="94" fill="#29200E" font-size="19" font-weight="700" text-anchor="middle">π</text><text x="594" y="93" fill="#A9B9AC" font-size="15" font-weight="700" letter-spacing="1.5">PI APP</text>
+    <path d="M48 142H702" stroke="#243329"/>
+
+    <text x="52" y="205" fill="#52E89A" font-size="17" font-weight="700" letter-spacing="3">ESCROW THAT KEEPS TERMS CLEAR</text>
+    <text x="48" y="290" fill="#F4F7F4" font-size="60" font-weight="700" letter-spacing="-2">Your Pi stays safe</text>
+    <text x="48" y="362" fill="#F4F7F4" font-size="60" font-weight="700" letter-spacing="-2">while work is <tspan fill="#33E889">underway.</tspan></text>
+    <text x="52" y="422" fill="#A8B6AB" font-size="24">Funds stay in escrow until the agreed</text>
+    <text x="52" y="458" fill="#A8B6AB" font-size="24">conditions are met.</text>
+
+    <g filter="url(#shadow)">
+      <rect x="48" y="510" width="654" height="760" rx="28" fill="#121A15" stroke="#304538" stroke-width="2"/>
+      <text x="80" y="565" fill="#8FA396" font-size="16" font-weight="700" letter-spacing="2">CONTRACT PROGRESS</text>
+      <rect x="516" y="535" width="154" height="42" rx="21" fill="#10271A" stroke="#27613D"/>
+      <circle cx="540" cy="556" r="6" fill="#32E88A"/><text x="556" y="562" fill="#9CF0B8" font-size="14" font-weight="700" letter-spacing=".6">ESCROW FUNDED</text>
+      <path d="M80 606H670" stroke="#2A3A2E" stroke-width="2"/>
+      <text x="80" y="661" fill="#71877A" font-size="15" font-weight="700" letter-spacing="1.5">WEBSITE REDESIGN</text>
+      <text x="80" y="711" fill="#F0F5F1" font-size="29" font-weight="700">Project agreement</text>
+      <text x="80" y="748" fill="#92A397" font-size="18">Escrow amount</text>
+      <text x="660" y="749" fill="#F2F6F2" font-size="22" font-weight="700" text-anchor="end">45 Pi</text>
+      <path d="M80 779H670" stroke="#2A3A2E" stroke-width="2"/>
+
+      <circle cx="105" cy="838" r="19" fill="#1A5531"/><path d="m97 838 6 6 11-13" fill="none" stroke="#65F0A0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="145" y="833" fill="#DCE6DE" font-size="21" font-weight="700">Terms agreed</text><text x="145" y="860" fill="#83968A" font-size="16">Both sides confirmed the scope</text>
+      <path d="M105 858V905" stroke="#355242" stroke-width="3"/>
+      <circle cx="105" cy="930" r="19" fill="#1A5531"/><path d="m97 930 6 6 11-13" fill="none" stroke="#65F0A0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="145" y="925" fill="#DCE6DE" font-size="21" font-weight="700">Pi funded to escrow</text><text x="145" y="952" fill="#83968A" font-size="16">Funds held until conditions are met</text>
+      <path d="M105 950V997" stroke="#355242" stroke-width="3"/>
+      <circle cx="105" cy="1022" r="19" fill="#1A5531" stroke="#39E88B" stroke-width="2"/><circle cx="105" cy="1022" r="5" fill="#39E88B"/>
+      <text x="145" y="1017" fill="#F1F6F2" font-size="21" font-weight="700">Work in progress</text><text x="145" y="1044" fill="#A4B5A8" font-size="16">Payment remains protected</text>
+      <path d="M105 1042V1089" stroke="#334338" stroke-width="3" stroke-dasharray="5 8"/>
+      <circle cx="105" cy="1114" r="19" fill="#171E19" stroke="#39483D" stroke-width="2"/><text x="105" y="1120" fill="#829487" font-size="17" text-anchor="middle">4</text>
+      <text x="145" y="1109" fill="#A5B2A8" font-size="21" font-weight="700">Approval &amp; release</text><text x="145" y="1136" fill="#78877C" font-size="16">Follows the agreed conditions</text>
+
+      <rect x="80" y="1180" width="590" height="56" rx="15" fill="#10271A"/>
+      <path d="M105 1198v-4a7 7 0 0 1 14 0v4m-17 0h20v19h-20z" fill="none" stroke="#43E893" stroke-width="2.3" stroke-linejoin="round"/>
+      <text x="143" y="1215" fill="#AEEBC1" font-size="16" font-weight="700">Funds are held securely until conditions are met</text>
+    </g>
+    <rect x="48" y="1310" width="654" height="74" rx="20" fill="#111A14" stroke="#2B4433"/>
+    <text x="375" y="1357" fill="#C5D2C8" font-size="20" font-weight="700" text-anchor="middle">Every step, clear to both sides.</text>
+    <path d="M48 1420H702" stroke="#243329"/>
+    <text x="52" y="1457" fill="#74877A" font-size="16" letter-spacing="1.2">PACTLINE  ·  WORK TOGETHER WITH CONFIDENCE</text>
+  </g>
+</svg>

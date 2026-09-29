@@ -1,0 +1,68 @@
+Skip to main content
+Search
+Search
+Close Search
+Pi Network
+search
+Menu
+Pi App Studio Community Guidelines
+ 
+
+1. Purpose & Scope
+Pi App Studio empowers Pioneers to create, customize, and deploy Pi-powered applications including chatbot and and custom applications. These guidelines apply to:
+
+Creators – individuals building or modifying an application via Pi App Studio.
+End Users – anyone interacting with a published application including chatbot and/or custom app developed using Pi App Studio.
+By using Pi App Studio, you agree to follow the principles which are intended to foster an innovative, safe, and responsible Creator ecosystem.
+
+2. Application Intent & Content Accuracy
+Respect application intent. When using Pi App Studio, you should ensure that the behavior and content of your application align with the intended purpose.
+Maintain accurate descriptions. Your application’s name, logo, and description should accurately represent and describe the functionality of the application.
+3. Policy Violations — Unacceptable Pi token practices include, but are not limited to, the following: 
+Material discussions, representations or misrepresentations regarding the value or valuation of Pi; or 
+Offering or facilitating gambling, betting, or lottery-related services involving Pi tokens, either directly or indirectly.
+Any other violation of Pi Network’s Terms of Services and/or applicable policies, including, but not limited to, those announced through Pi’s official channels ( Pi’s mobile apps, websites and social media maintained by Pi Network). 
+4. Fraudulent or Defamatory Conduct — Any activity, comments, language or other products which would be considered to be unethical or ill intentioned including, but not limited to the following:
+Phishing, spamming, or misrepresenting services/knowledge being offered; 
+Creating applications or posting of content on applications which depict or portray other individuals or entities in a manner that may be defamatory, derogatory or otherwise may harm another member, non-member or entity; 
+Conduct that appears to be fraudulent in nature; or
+Conduct that appears to otherwise solicit or invite members to participate in fraudulent conduct or activities.
+5. Sharing of Personal or Sensitive Information
+Do not request, store, or display users’ passphrases, private keys, or other sensitive data.
+Protect all personal data you collect (e.g., email address, phone number, etc.). It is your obligation to comply with all applicable privacy laws, as well as Pi Network Terms of Service and policies.
+Always remember to protect personal and sensitive information.  This includes personal and sensitive information that is yours, as well as the personal or sensitive information of others to which you have been exposed.
+6. Illegal Conduct — Any activity, action, or comments that would otherwise be considered to be illegal including, but not limited to, the following:
+Your application or content must not facilitate or encourage:
+
+Selling or soliciting iIllegal, controlled, or other regulated goods or services;
+Child Sexual Exploitation; 
+Abuse or Harassment of other individuals or groups;
+Promoting acts of violence, terrorism, murder, suicide, or harmful acts of any kind to other individuals or groups; 
+Any other activity, action, or comments that are not consistent with Pi’s terms of service, or which would otherwise be considered to be illegal or potentially illegal conduct that does not fit within the above listed items; or
+The sharing of materials or information that you know, or have a reasonable belief, would infringe on the copyright and/or trademark of another individual or entity, including, but not limited to the following: word marks; logos; design marks; still or moving images; sounds; art; and/or music.
+7. Enforcement
+Applications and content, that violate these guidelines may be:
+
+Paused or removed from deployment.
+Returned to the Creator for revision.
+Reported to Pi Network’s legal/Trust & Safety teams where appropriate.
+Repeated or severe violations can result in account restrictions or permanent removal from Pi App Studio and the Pi ecosystem.
+
+These guidelines are intended to foster a safe, respectful, and responsible online community on Pi App Studio and on Pi Network. By their nature, they are not exhaustive, and there are some actions, activity, and/or content that is not described above which would be considered to violate the above referenced categories.  These guidelines are intended to be informational in nature to assist Moderators and users of Pi Network and Pi App Studio.  It is important to note that the above list is non-exhaustive, and activity, action or content that violates the above guidelines or the terms of service, may be removed for reasons not specified above.  We request that you assist Pi Network by adhering to, and encouraging other Pioneers to adhere to, these principles while participating in discussions and sharing content through Pi Network and Pi App Studio.  Thank you for your assistance in creating a better user experience for all Pioneers!
+
+Pi Network
+Start mining. Easy as Pi!
+Download
+Pi Whitepaper
+Support & FAQ
+Community Code of Conduct
+Terms of Service
+Pi App Studio Community Guidelines
+Privacy Policy
+Developer Terms of Use
+Pi Trademark
+Safety Center
+Pi App Studio Terms and Conditions
+
+© 2024 SocialChain Inc. | All rights reserved.
+

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Escrow Contracts"
+description = "A secure escrow and digital contract workspace that helps buyers and sellers lock funds, track delivery, release payments automatically, and resolve disputes in one place."
+version = "1.0.0"
+id = "artifacts/escrow-contracts"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25087
+
+[services.development]
+run = "pnpm --filter @workspace/escrow-contracts run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/escrow-contracts", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/escrow-contracts/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25087"
+BASE_PATH = "/"

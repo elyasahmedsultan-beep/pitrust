@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1500" viewBox="0 0 750 1500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08100B"/><stop offset="1" stop-color="#050806"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#13E46A"/><stop offset="1" stop-color="#00B94F"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#0C9E52" stop-opacity=".23"/><stop offset="1" stop-color="#0C9E52" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M72 0H0V72" fill="none" stroke="#82A88C" stroke-opacity=".055" stroke-width="1"/></pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000" flood-opacity=".35"/></filter>
+  </defs>
+  <rect width="750" height="1500" fill="url(#bg)"/><rect width="750" height="1500" fill="url(#grid)"/><circle cx="620" cy="220" r="360" fill="url(#glow)"/>
+  <g font-family="DejaVu Sans, Arial, sans-serif">
+    <rect x="48" y="62" width="48" height="48" rx="15" fill="url(#green)"/>
+    <path d="M72 73l12 4v10c0 9-6 14-12 18-6-4-12-9-12-18V77z" fill="none" stroke="#05230F" stroke-width="3" stroke-linejoin="round"/><path d="m67 87 4 4 7-8" fill="none" stroke="#05230F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="110" y="95" fill="#F0F5F1" font-size="25" font-weight="700" letter-spacing=".4">PACTLINE</text>
+    <rect x="552" y="68" width="150" height="38" rx="19" fill="#151D17" stroke="#2B3F31"/><circle cx="575" cy="87" r="11" fill="#F6A83B"/><text x="575" y="94" fill="#29200E" font-size="19" font-weight="700" text-anchor="middle">π</text><text x="594" y="93" fill="#A9B9AC" font-size="15" font-weight="700" letter-spacing="1.5">PI APP</text>
+    <path d="M48 142H702" stroke="#243329"/>
+
+    <text x="52" y="205" fill="#52E89A" font-size="17" font-weight="700" letter-spacing="3">FINISH WITH CONFIDENCE</text>
+    <text x="48" y="292" fill="#F4F7F4" font-size="61" font-weight="700" letter-spacing="-2">Approve the work.</text>
+    <text x="48" y="365" fill="#F4F7F4" font-size="61" font-weight="700" letter-spacing="-2">Release with <tspan fill="#33E889">clarity.</tspan></text>
+    <text x="52" y="424" fill="#A8B6AB" font-size="25">Payment follows the terms you agreed on.</text>
+
+    <g filter="url(#shadow)">
+      <rect x="48" y="493" width="654" height="708" rx="28" fill="#121A15" stroke="#304538" stroke-width="2"/>
+      <text x="80" y="550" fill="#8FA396" font-size="16" font-weight="700" letter-spacing="2">READY FOR REVIEW</text>
+      <rect x="526" y="524" width="144" height="38" rx="19" fill="#10271A" stroke="#27613D"/>
+      <circle cx="548" cy="543" r="5" fill="#31E88A"/><text x="563" y="549" fill="#9CF0B8" font-size="13" font-weight="700" letter-spacing=".5">DELIVERED</text>
+      <path d="M80 586H670" stroke="#2A3A2E" stroke-width="2"/>
+
+      <rect x="80" y="619" width="590" height="202" rx="20" fill="#17221A" stroke="#293D2F"/>
+      <rect x="101" y="641" width="71" height="71" rx="17" fill="#213B2A"/>
+      <path d="M119 686h35m-28-30h21l7 8v22h-28z" fill="none" stroke="#6CEBA0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M142 656v10h10" fill="none" stroke="#6CEBA0" stroke-width="2.5" stroke-linejoin="round"/>
+      <text x="193" y="658" fill="#809286" font-size="14" font-weight="700" letter-spacing="1.2">CONTRACT DELIVERY</text>
+      <text x="193" y="693" fill="#F0F5F1" font-size="22" font-weight="700">Website redesign</text>
+      <text x="193" y="723" fill="#94A499" font-size="16">Final files submitted for review</text>
+      <rect x="101" y="750" width="548" height="48" rx="13" fill="#10271A"/>
+      <path d="m121 770 6 6 12-13" fill="none" stroke="#4BEA91" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="151" y="781" fill="#B6E9C5" font-size="16" font-weight="700">Work marked as delivered</text>
+
+      <text x="80" y="875" fill="#748A79" font-size="15" font-weight="700" letter-spacing="1.5">ESCROW SUMMARY</text>
+      <text x="80" y="925" fill="#F0F5F1" font-size="22" font-weight="700">Agreed amount</text>
+      <text x="660" y="925" fill="#F0F5F1" font-size="22" font-weight="700" text-anchor="end">45 Pi</text>
+      <path d="M80 950H670" stroke="#2A3A2E" stroke-width="2"/>
+      <text x="80" y="991" fill="#93A498" font-size="17">Held in escrow</text>
+      <text x="660" y="991" fill="#9BE9B4" font-size="17" font-weight="700" text-anchor="end">Until approval</text>
+
+      <rect x="80" y="1031" width="590" height="95" rx="17" fill="#10271A" stroke="#225C39"/>
+      <circle cx="112" cy="1078" r="19" fill="#194C2E"/>
+      <path d="M104 1078h16m-8-8v16" stroke="#5BEA98" stroke-width="2.5" stroke-linecap="round"/>
+      <text x="148" y="1071" fill="#BDF4D0" font-size="18" font-weight="700">Approve when the work meets</text>
+      <text x="148" y="1098" fill="#BDF4D0" font-size="18" font-weight="700">the agreed conditions.</text>
+      <text x="80" y="1170" fill="#778A7D" font-size="15">Review the delivery before authorizing release.</text>
+    </g>
+    <rect x="48" y="1253" width="654" height="102" rx="22" fill="url(#green)"/>
+    <path d="M282 1301l12 12 23-26" fill="none" stroke="#06230F" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="475" y="1313" fill="#06230F" font-size="23" font-weight="700" text-anchor="middle">Release after approval</text>
+    <path d="M48 1401H702" stroke="#243329"/>
+    <text x="52" y="1441" fill="#74877A" font-size="16" letter-spacing="1.2">PACTLINE  ·  WORK TOGETHER WITH CONFIDENCE</text>
+  </g>
+</svg>

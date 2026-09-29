@@ -1,0 +1,45 @@
+You are an expert Pi Network full-stack developer. Make both changes to this codebase now - write the actual files, do not produce a guide or explanation.
+
+1. Add the Pi app configuration file.
+
+Create a file named pi-app-validation.txt containing exactly this single line and nothing else:
+
+piappstudio-nafzf_M95T_Zab9oWQU2n6N1gDh1z7oE
+
+- Once deployed it must be reachable at exactly this URL: https://pitrustweb.com/pi-app-validation.txt
+- Put it wherever this project serves static assets from - for example public/, static/, dist/, or the equivalent for this framework. Do not put it in a source folder that gets compiled or bundled.
+- It must be served as a static file, excluded from any catch-all route. Do NOT add a route, handler, or redirect for it, and do NOT generate it with JavaScript at runtime - it has to be in the served response body.
+- The file must contain only the token above. No quotes, no JSON, no HTML, no extra whitespace or comments.
+
+2. Implement Pi Network user authentication. Reference: https://pi-apps.github.io/pi-sdk-docs/quick-start/genai/Authentication.
+
+STEP 1 - Sign the user in, in the browser.
+- Load the Pi SDK first: add <script src="https://sdk.minepi.com/pi-sdk.js"></script> to the document head (app/layout.tsx in Next.js, index.html in a plain frontend). window.Pi does not exist until it loads, so every step below fails silently without it.
+- Await Pi.init({ version: "2.0" }) fully before calling Pi.authenticate(...). Do not pass "sandbox" - it is detected automatically now.
+- Call Pi.authenticate(["username"], onIncompletePaymentFound) on load, or alternatively on sign-in button press.
+- Keep the accessToken. Ignore the uid and username beside it.
+
+STEP 2 - Exchange that accessToken with App Studio. Every app must do this, without exception.
+
+    POST https://backend.appstudio-u7cm9zhmha0ruwv8.piappengine.com/pi/auth/v1/login
+    Content-Type: application/json
+    { "accessToken": "<the accessToken from Pi.authenticate>" }
+
+    200 -> { "sessionToken": "<token>", "user": { "uid": "<pi user id>", "username": "<pi username>" } }
+
+App Studio checks the token against the Pi Platform before answering, so the uid and username it returns are the only identity your app may trust. No Pi Network API key is needed.
+
+STEP 3 - Call STEP 2 from whatever part of your app decides what a user is allowed to do.
+- Any server-side code at all (an API route, a serverless or edge function, an Express/Rails/Django server)? Call it there, then issue your own session from the result.
+- A static frontend with no server-side code? Call it straight from the browser and keep the sessionToken in memory. It works exactly the same either way, so having no backend is NOT a reason to skip STEP 2.
+- Never both. One exchange per sign-in.
+
+NEVER:
+- Never let the uid or username from Pi.authenticate(...) decide what a user may see, change or receive - they came from the browser, which the end user controls.
+- Never accept a uid or username from a request body, query string or header as the caller's identity.
+- Never call the Pi Platform's /v2/me yourself to authenticate a user - use STEP 2, so user records and app verification keep working.
+
+Use these exact values:
+- Pi SDK <script> src: https://sdk.minepi.com/pi-sdk.js
+
+Then redeploy the app to the same URL so both changes go live.

@@ -1,0 +1,45 @@
+modules = ["nodejs-24", "python-base-3.13"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[nix]
+channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+
+[userenv.development]
+PI_A2U_ENABLED = "false"
+PI_A2U_TESTNET_ENABLED = "false"
+PI_IFRAME_SESSION_ENABLED = "false"
+PI_MAINNET_HOSTS = "pitrustweb.com,*.pitrustweb.com"
+PI_NETWORK = "mainnet"
+VITE_PI_SANDBOX = "false"
+VITE_PI_SANDBOX_HOST_RULES = "pitrustweb.com=false,*.pitrustweb.com=false,supabase-server-hub.replit.app=false"
+
+[userenv.production]
+PI_A2U_ENABLED = "true"
+PI_A2U_TESTNET_ENABLED = "false"
+PI_IFRAME_SESSION_ENABLED = "false"
+PI_MAINNET_HOSTS = "pitrustweb.com,*.pitrustweb.com"
+PI_NETWORK = "mainnet"
+VITE_PI_SANDBOX = "false"
+VITE_PI_SANDBOX_HOST_RULES = "pitrustweb.com=false,*.pitrustweb.com=false,supabase-server-hub.replit.app=false"

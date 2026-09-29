@@ -1,0 +1,2143 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: dashboard
+    description: Escrow workspace overview
+  - name: contracts
+    description: Digital contracts and escrow actions
+  - name: disputes
+    description: Dispute resolution
+  - name: activity
+    description: Recent transaction activity
+  - name: chat
+    description: Public language-based chat rooms
+  - name: payments
+    description: Pi-verified escrow payments
+  - name: auth
+    description: Alternate sign-in methods
+  - name: marketplace
+    description: Listings, fulfillment and communication
+  - name: profile
+    description: User profiles and referrals
+  - name: wallet
+    description: Testnet-only internal wallet and faucet
+  - name: market
+    description: Live marketplace data
+  - name: admin
+    description: Verified moderator escrow reconciliation
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get escrow dashboard summary
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /contracts:
+    get:
+      operationId: listContracts
+      tags: [contracts]
+      summary: List contracts
+      responses:
+        "200":
+          description: Contracts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contract"
+    post:
+      operationId: createContract
+      tags: [contracts]
+      summary: "Disabled: use a listing so the seller account is verified"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractInput"
+      responses:
+        "409":
+          description: Direct contracts are disabled until an identified seller invitation flow exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /contracts/{id}:
+    get:
+      operationId: getContract
+      tags: [contracts]
+      summary: Get a contract
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contract"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /contracts/{id}/status:
+    patch:
+      operationId: updateContractStatus
+      tags: [contracts]
+      summary: Legacy status update is disabled; state changes are server-verified
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdate"
+      responses:
+        "409":
+          description: Status cannot be changed directly
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /contracts/{id}/fund:
+    post:
+      operationId: fundContract
+      tags: [contracts]
+      summary: Fund a Testnet escrow from the internal wallet balance
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Internal Testnet balance was debited and escrow funded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contract"
+        "409":
+          description: Funding was blocked by contract state or wallet balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Contract was not found for the authenticated buyer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /contracts/{id}/confirm-delivery:
+    post:
+      operationId: confirmDelivery
+      tags: [contracts]
+      summary: Confirm delivery
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Contract ready for release
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contract"
+  /contracts/{id}/release:
+    post:
+      operationId: releaseFunds
+      tags: [contracts]
+      summary: Persist and execute a guarded Pi A2U seller payout
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Pi confirmed and atomically settled the A2U payout
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "202":
+          description: Payout is pending or requires manual reconciliation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutPending" }
+        "503":
+          description: Payouts require an explicit feature flag and dedicated credentials for the selected Pi network; mainnet payouts additionally require production
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Testnet uses internal wallet settlement rather than a Pi A2U transfer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /contracts/{id}/release-wallet:
+    post:
+      operationId: releaseContractToTestnetWallet
+      tags: [contracts]
+      summary: Credit the seller's internal Testnet wallet after delivery
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: The internal Testnet wallet settlement completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+        "409":
+          description: Contract is not eligible for internal settlement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Contract was not found for the authenticated buyer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/payouts:
+    get:
+      operationId: listAdminPayouts
+      tags: [admin]
+      summary: List payout intent statuses for password-authenticated admin sessions
+      responses:
+        "200":
+          description: Payout intent status list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminPayout" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/payouts/reconcile:
+    post:
+      operationId: reconcileAdminPayouts
+      tags: [admin]
+      summary: Reconcile incomplete Pi server payments without retrying submit
+      responses:
+        "200":
+          description: Reconciliation outcomes; ambiguous or unmatched transfers remain manual
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminPayoutReconciliation" }
+        "403":
+          description: Moderator authorization required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Pi reconciliation is unavailable unless payouts are explicitly enabled for the selected network with matching credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/access:
+    get:
+      operationId: getAdminAccess
+      tags: [admin]
+      summary: Check password-session access and Clerk arbitrator payout permission
+      responses:
+        "200":
+          description: Admin session and payout authorization status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAccess" }
+  /admin/session:
+    post:
+      operationId: createAdminSession
+      tags: [admin]
+      summary: Create a short-lived admin session with the configured secret password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSessionInput" }
+      responses:
+        "200":
+          description: Admin password accepted
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: HttpOnly, same-site admin session cookie
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSessionResult" }
+        "401":
+          description: Password was not accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Request did not originate from this site
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Admin password or session signing secret is not configured
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      operationId: deleteAdminSession
+      tags: [admin]
+      summary: Clear the current admin password session
+      responses:
+        "204":
+          description: Admin session cleared
+        "403":
+          description: Request did not originate from this site
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Live arbitration and payout counters for password-authenticated admin sessions
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOverview" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/chat/rooms:
+    get:
+      operationId: listAdminChatRooms
+      tags: [admin]
+      summary: List language chat rooms and their moderators
+      responses:
+        "200":
+          description: Chat room configuration
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminPublicChatRoom" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      operationId: createAdminChatRoom
+      tags: [admin]
+      summary: Create a public room for one supported language
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicChatRoomInput" }
+      responses:
+        "201":
+          description: Chat room created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminPublicChatRoom" }
+        "409":
+          description: A room already exists for this language
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/chat/rooms/{roomId}:
+    patch:
+      operationId: updateAdminChatRoom
+      tags: [admin]
+      summary: Rename or activate/deactivate a public language room
+      parameters:
+        - $ref: "#/components/parameters/ChatRoomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicChatRoomUpdate" }
+      responses:
+        "200":
+          description: Updated room configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminPublicChatRoom" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Chat room not found
+  /admin/chat/members:
+    get:
+      operationId: searchAdminChatMembers
+      tags: [admin]
+      summary: Search members by display name to assign room moderators
+      parameters:
+        - name: search
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 80 }
+      responses:
+        "200":
+          description: Matching member names and internal identifiers for admin use
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminChatMember" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/chat/rooms/{roomId}/moderators/{userId}:
+    put:
+      operationId: addAdminChatModerator
+      tags: [admin]
+      summary: Assign a member as a moderator for one room
+      parameters:
+        - $ref: "#/components/parameters/ChatRoomId"
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "204":
+          description: Moderator assignment saved
+        "401":
+          description: Password-authenticated admin session required
+        "404":
+          description: Room or member not found
+    delete:
+      operationId: removeAdminChatModerator
+      tags: [admin]
+      summary: Remove a room moderator
+      parameters:
+        - $ref: "#/components/parameters/ChatRoomId"
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "204":
+          description: Moderator assignment removed
+        "401":
+          description: Password-authenticated admin session required
+        "404":
+          description: Chat room not found
+  /admin/disputes:
+    get:
+      operationId: listAdminDisputes
+      tags: [admin]
+      summary: List disputes and related escrow details for password-authenticated admin sessions
+      responses:
+        "200":
+          description: Disputes, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminDispute" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/disputes/{id}/analyze:
+    post:
+      operationId: analyzeAdminDispute
+      tags: [admin]
+      summary: Get an advisory Gemini analysis with an admin password session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Advisory analysis for human review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAnalysis" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Request did not originate from this site
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Gemini analysis unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/disputes/{id}/decide:
+    post:
+      operationId: decideAdminDispute
+      tags: [admin]
+      summary: Human-approved and Pi-verified escrow release or full buyer refund
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminDecisionInput" }
+      responses:
+        "200":
+          description: Pi confirmed the A2U payment and the dispute was settled atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminDecisionResult" }
+        "202":
+          description: Ambiguous payout requires manual reconciliation; no second transfer attempted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminDecisionResult" }
+        "403":
+          description: Arbitrator authorization required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Selected-network payout prerequisites are not met
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /badges/monthly/intent:
+    post:
+      operationId: createMonthlyBadgePaymentIntent
+      tags: [payments]
+      summary: Reserve a separately verified two-Pi monthly badge audit
+      responses:
+        "200":
+          description: Pending audit and Pi SDK payment metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MonthlyBadgeIntent" }
+        "409":
+          description: The user's monthly badge has already been confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Pi Platform API is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /badges/monthly:
+    get:
+      operationId: getMonthlyBadgeStatus
+      tags: [payments]
+      summary: Read this user's current monthly badge audit state
+      responses:
+        "200":
+          description: Badge is active only after Pi transaction confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MonthlyBadgeStatus" }
+  /pi/escrow-service-deposits/intent:
+    post:
+      operationId: createEscrowServiceDepositIntent
+      tags: [payments]
+      summary: Get the fixed Pi payment parameters for the escrow service deposit
+      responses:
+        "200":
+          description: Product details and exact U2A payment metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EscrowServiceDepositIntent" }
+        "409":
+          description: Mainnet Pi account linking is required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Pi payment configuration is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /pi/escrow-service-deposits:
+    get:
+      operationId: listEscrowServiceDeposits
+      tags: [payments]
+      summary: List the current user's confirmed and pending escrow service deposits
+      responses:
+        "200":
+          description: The current user's recent U2A service deposits
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EscrowServiceDeposit" }
+  /contracts/{id}/payment:
+    post:
+      operationId: createContractPaymentIntent
+      tags: [payments]
+      summary: Get verified Pi SDK funding parameters
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Pi payment parameters; contract remains unfunded until Pi confirms
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentIntent" }
+  /contracts/{id}/dispute-fee:
+    post:
+      operationId: createDisputeFeeIntent
+      tags: [payments]
+      summary: Get Pi payment parameters for the currently configured dispute fee
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Payment parameters for the configured Pi dispute fee
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentIntent" }
+  /contracts/{id}/disputes:
+    get:
+      operationId: listDisputes
+      tags: [disputes]
+      summary: List disputes for a contract
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Disputes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Dispute"
+    post:
+      operationId: createDispute
+      tags: [disputes]
+      summary: Open a dispute
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputeInput"
+      responses:
+        "201":
+          description: Created dispute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+  /activity:
+    get:
+      operationId: listActivity
+      tags: [activity]
+      summary: List recent activity
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+  /pi/payments/approve:
+    post:
+      operationId: approvePiPayment
+      tags: [payments]
+      summary: Verify and approve an incoming Pi payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PiPaymentAction"
+      responses:
+        "200":
+          description: Payment approved by Pi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PiApproval"
+  /pi/link:
+    post:
+      operationId: linkPiAccount
+      tags: [payments]
+      summary: Verify and immutably link the signed-in user's Pi UID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PiAccountLinkInput" }
+      responses:
+        "200":
+          description: Pi account is linked to the current Clerk account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiAccountLink" }
+  /pi/authenticate:
+    post:
+      operationId: authenticatePi
+      tags: [auth]
+      summary: Authenticate or register using a verified Pi identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PiAuthenticationInput" }
+      responses:
+        "200":
+          description: One-time Clerk sign-in ticket for the verified Pi identity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiAuthentication" }
+  /pi/session:
+    post:
+      operationId: createPiSession
+      tags: [auth]
+      summary: Create a verified Pi HttpOnly application session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PiAuthenticationInput" }
+      responses:
+        "200":
+          description: Pi identity authenticated and an HttpOnly session cookie was set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: HttpOnly, SameSite=Lax, Path=/api, 24-hour Pi session cookie
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiAppSession" }
+        "400": { description: Invalid request }
+        "401": { description: Pi access token was rejected }
+        "404": { description: No Pactline account is linked to this Pi identity }
+        "409": { description: Pi identity is linked to another account }
+        "503": { description: Pi session service is unavailable }
+    get:
+      operationId: getPiSession
+      tags: [auth]
+      summary: Read the current Pi HttpOnly application session
+      security:
+        - piAppSessionCookie: []
+      responses:
+        "200":
+          description: Current Pi session state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiAppSessionState" }
+    delete:
+      operationId: deletePiSession
+      tags: [auth]
+      summary: Revoke the current Pi HttpOnly application session
+      security:
+        - piAppSessionCookie: []
+      responses:
+        "200":
+          description: Session revoked and cookie cleared
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiSessionDeletion" }
+  /pi/iframe-session:
+    post:
+      operationId: createPiIframeSession
+      tags: [auth]
+      summary: Verify a Pi identity and issue a short-lived Sandbox-only application session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PiIframeSessionInput" }
+      responses:
+        "200":
+          description: Opaque application-session token and its expiry time; valid only in the allowlisted Testnet Sandbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiIframeSession" }
+        "401":
+          description: Pi access token was rejected
+        "404":
+          description: Feature is disabled or the host is not an allowed Sandbox
+        "503":
+          description: Pi identity session service is unavailable
+    delete:
+      operationId: revokePiIframeSession
+      tags: [auth]
+      summary: Revoke the current Sandbox-only Pi application session
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token returned by POST /pi/iframe-session
+          schema:
+            type: string
+            pattern: "^Bearer [A-Za-z0-9_-]{43}$"
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          description: Session token is missing, invalid, or expired
+        "404":
+          description: Feature is disabled or the host is not an allowed Sandbox
+        "503":
+          description: Pi identity session service is unavailable
+  /pi/iframe-session/identity:
+    get:
+      operationId: getPiIframeIdentity
+      tags: [auth]
+      summary: Verify a Sandbox-only Pi application session and return its identity
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token returned by POST /pi/iframe-session
+          schema:
+            type: string
+            pattern: "^Bearer [A-Za-z0-9_-]{43}$"
+      responses:
+        "200":
+          description: The Pi identity verified by the short-lived session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiIframeIdentity" }
+        "401":
+          description: Session token is missing, invalid, or expired
+        "404":
+          description: Feature is disabled or the host is not an allowed Sandbox
+        "503":
+          description: Pi identity session service is unavailable
+  /pi/status:
+    get:
+      operationId: getPiStatus
+      tags: [auth]
+      summary: Get the current account's Pi link status
+      responses:
+        "200":
+          description: Whether Pi is linked to the current account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiAccountStatus" }
+  /pi/payments/complete:
+    post:
+      operationId: completePiPayment
+      tags: [payments]
+      summary: Verify and complete an incoming Pi payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PiPaymentCompletion"
+      responses:
+        "200":
+          description: Payment confirmed by Pi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PiFundingResult"
+  /listings:
+    get:
+      operationId: searchListings
+      tags: [marketplace]
+      summary: Search active public listings
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: pipeline
+          in: query
+          schema: { type: string, enum: [digital, shippable, local_property, custom_terms] }
+      responses:
+        "200":
+          description: Active listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Listing" }
+    post:
+      operationId: createListing
+      tags: [marketplace]
+      summary: Create a listing owned by the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingInput" }
+      responses:
+        "201":
+          description: Created listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Listing" }
+  /listings/{id}/contracts:
+    post:
+      operationId: createListingContract
+      tags: [marketplace]
+      summary: Start an escrow from an active listing, assigning its verified owner as seller
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingContractInput" }
+      responses:
+        "201":
+          description: Escrow contract created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+  /market/stats:
+    get:
+      operationId: getMarketStats
+      tags: [market]
+      summary: Compute market statistics from escrow rows
+      responses:
+        "200":
+          description: Current database-derived statistics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MarketStats" }
+  /market/public-pi-transactions:
+    get:
+      operationId: listPublicPiTransactions
+      tags: [market]
+      summary: List server-verified Pi transactions safe for public display
+      security: []
+      responses:
+        "200":
+          description: Publicly safe Pi transaction records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicPiTransactionFeed" }
+  /contracts/{id}/delivery:
+    post:
+      operationId: submitDelivery
+      tags: [marketplace]
+      summary: Submit pipeline-specific delivery evidence
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryInput" }
+      responses:
+        "201":
+          description: Delivery evidence recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Delivery" }
+  /contracts/{id}/signatures:
+    get:
+      operationId: listSignatures
+      tags: [marketplace]
+      summary: List contract e-signature records for the authenticated participant
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Signatures
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Signature" }
+    post:
+      operationId: signContract
+      tags: [marketplace]
+      summary: Record the authenticated participant's signature
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignatureInput" }
+      responses:
+        "201":
+          description: Signature recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Signature" }
+  /contracts/{id}/messages:
+    get:
+      operationId: listContractMessages
+      tags: [marketplace]
+      summary: Poll participant-only contract messages
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Most recent messages; clients may safely poll
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ChatMessage" }
+    post:
+      operationId: sendContractMessage
+      tags: [marketplace]
+      summary: Send a message as the authenticated participant
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatMessageInput" }
+      responses:
+        "201":
+          description: Message stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatMessage" }
+  /chat/rooms:
+    get:
+      operationId: listPublicChatRooms
+      tags: [chat]
+      summary: List active public chat rooms for authenticated members
+      responses:
+        "200":
+          description: Active language rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicChatRoom" }
+        "401":
+          description: Authentication required
+  /chat/messages:
+    get:
+      operationId: listPublicChatMessages
+      tags: [chat]
+      summary: List room messages and automatically translate them to the selected app language
+      parameters:
+        - name: roomId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: targetLanguage
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/ChatLanguage" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 30 }
+      responses:
+        "200":
+          description: Chronological message page with available translations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicChatMessagePage" }
+        "401":
+          description: Authentication required
+        "404":
+          description: Chat room not found or inactive
+  /chat/rooms/{roomId}/messages:
+    post:
+      operationId: sendPublicChatMessage
+      tags: [chat]
+      summary: Send a message in a public language room
+      parameters:
+        - $ref: "#/components/parameters/ChatRoomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicChatMessageInput" }
+      responses:
+        "201":
+          description: Message stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicChatMessage" }
+        "401":
+          description: Authentication required
+        "404":
+          description: Chat room not found or inactive
+        "429":
+          description: Too many messages; try again later
+  /chat/messages/{messageId}:
+    delete:
+      operationId: moderatePublicChatMessage
+      tags: [chat]
+      summary: Remove a message as its sender or an assigned room moderator
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Message removed
+        "401":
+          description: Authentication required
+        "403":
+          description: Only the message sender, room moderator, or platform admin may remove this message
+        "404":
+          description: Message not found
+  /contracts/{id}/evidence/upload-url:
+    post:
+      operationId: createEvidenceUploadUrl
+      tags: [marketplace]
+      summary: Create a time-limited private evidence upload URL
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvidenceUploadInput" }
+      responses:
+        "200":
+          description: Signed upload destination for a private object
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvidenceUploadUrl" }
+  /contracts/{id}/evidence/confirm:
+    post:
+      operationId: confirmEvidenceUpload
+      tags: [marketplace]
+      summary: Verify uploaded object metadata and persist private evidence metadata
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvidenceConfirmationInput" }
+      responses:
+        "201":
+          description: Verified evidence metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvidenceConfirmation" }
+  /contracts/{id}/evidence:
+    get:
+      operationId: listContractEvidence
+      tags: [marketplace]
+      summary: List private evidence metadata for a participant
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Evidence metadata; object keys are never exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvidenceList" }
+  /contracts/{id}/evidence/{evidenceId}:
+    get:
+      operationId: downloadContractEvidence
+      tags: [marketplace]
+      summary: Stream private evidence after participant authorization
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+        - name: evidenceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Private evidence file bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get the authenticated user's profile
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+    put:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update the authenticated user's public profile fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileInput" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+  /wallet:
+    get:
+      operationId: getTestnetWallet
+      tags: [wallet]
+      summary: Get the authenticated user's Testnet wallet and transaction history
+      responses:
+        "200":
+          description: Testnet wallet balance, address, faucet status, and recent transactions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestnetWallet" }
+  /wallet/faucet/claim:
+    post:
+      operationId: claimTestnetFaucet
+      tags: [wallet]
+      summary: Claim 100 internal Test-Pi under the Testnet faucet rules
+      responses:
+        "200":
+          description: Faucet claim recorded atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestnetFaucetClaim" }
+        "409":
+          description: Faucet cooldown remains or the balance is above the repeat-claim limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestnetFaucetClaimBlocked" }
+  /wallet/transfers:
+    post:
+      operationId: transferTestnetWallet
+      tags: [wallet]
+      summary: Send internal Test-Pi to a Testnet wallet address or unique profile name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestnetWalletTransferInput" }
+      responses:
+        "200":
+          description: Internal transfer recorded atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestnetWalletTransfer" }
+        "400":
+          description: Invalid transfer input
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Transfer was blocked by recipient or balance rules
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /referrals:
+    get:
+      operationId: getReferralSummary
+      tags: [profile]
+      summary: Get referral code and confirmed reward balance
+      responses:
+        "200":
+          description: Referral data
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralSummary" }
+  /disputes/{id}/resolve:
+    post:
+      operationId: resolveDispute
+      tags: [disputes]
+      summary: Disabled legacy resolution route; use the arbitrator payout decision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DisputeResolutionInput" }
+      responses:
+        "409":
+          description: Resolution without a confirmed Pi payout is disabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  securitySchemes:
+    piAppSessionCookie:
+      type: apiKey
+      in: cookie
+      name: pitrust_pi_session
+  parameters:
+    ContractId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ChatRoomId:
+      name: roomId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Contract:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        buyerId:
+          type: ["string", "null"]
+        sellerId:
+          type: ["string", "null"]
+        pipeline:
+          type: string
+          enum: [digital, shippable, local_property, custom_terms]
+        metadata:
+          type: object
+          additionalProperties: true
+        title:
+          type: string
+        reference:
+          type: string
+        buyerName:
+          type: string
+        sellerName:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [draft, awaiting_funding, funded, in_delivery, completed, disputed, resolved, refunded, cancelled]
+        dueDate:
+          type: string
+        paymentMethod:
+          type: string
+        nextAction:
+          type: ["string", "null"]
+        disputeCount:
+          type: integer
+        releaseDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - buyerId
+        - sellerId
+        - pipeline
+        - metadata
+        - title
+        - reference
+        - buyerName
+        - sellerName
+        - amount
+        - currency
+        - status
+        - dueDate
+        - paymentMethod
+        - nextAction
+        - disputeCount
+        - releaseDate
+        - createdAt
+        - updatedAt
+    ContractInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        reference:
+          type: string
+          minLength: 1
+        buyerName:
+          type: string
+          minLength: 1
+        sellerName:
+          type: string
+          minLength: 1
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          pattern: "^(?:[Pp][Ii]|[A-Za-z]{3})$"
+        dueDate:
+          type: string
+        paymentMethod:
+          type: string
+          minLength: 1
+        pipeline:
+          type: string
+          enum: [digital, shippable, local_property, custom_terms]
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [title, reference, buyerName, sellerName, amount, currency, dueDate, paymentMethod]
+    StatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, awaiting_funding, funded, in_delivery, completed, disputed, resolved, refunded, cancelled]
+        note:
+          type: ["string", "null"]
+      required: [status]
+    Dispute:
+      type: object
+      properties:
+        id:
+          type: string
+        contractId:
+          type: string
+        reason:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, under_review, resolved]
+        requestedResolution:
+          type: string
+        resolution:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, contractId, reason, description, status, requestedResolution, resolution, createdAt, updatedAt]
+    DisputeInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+        requestedResolution:
+          type: string
+          minLength: 1
+      required: [reason, description, requestedResolution]
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+        contractId:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        actor:
+          type: string
+        tone:
+          type: string
+          enum: [positive, neutral, warning, danger]
+        createdAt:
+          type: string
+      required: [id, contractId, type, title, description, actor, tone, createdAt]
+    DashboardSummary:
+      type: object
+      properties:
+        totalValue:
+          type: number
+        lockedValue:
+          type: number
+        pendingRelease:
+          type: number
+        openDisputes:
+          type: integer
+        activeContracts:
+          type: integer
+        completionRate:
+          type: number
+      required: [totalValue, lockedValue, pendingRelease, openDisputes, activeContracts, completionRate]
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    PiPaymentAction:
+      type: object
+      properties:
+        paymentId: { type: string, minLength: 1 }
+        purpose: { type: string, enum: [escrow_service_deposit] }
+      required: [paymentId]
+    PiAccountLinkInput:
+      type: object
+      properties:
+        accessToken: { type: string, minLength: 1, maxLength: 4096 }
+      required: [accessToken]
+    PiAccountLink:
+      type: object
+      properties:
+        linked: { type: boolean, const: true }
+      required: [linked]
+    PiAuthenticationInput:
+      type: object
+      properties:
+        accessToken: { type: string, minLength: 1, maxLength: 4096 }
+        intent: { type: string, enum: ["sign-in", "sign-up"] }
+      required: [accessToken, intent]
+    PiAuthentication:
+      type: object
+      properties:
+        ticket: { type: string, minLength: 1 }
+      required: [ticket]
+    PiAppSession:
+      type: object
+      properties:
+        authenticated: { type: boolean, const: true }
+        accountId: { type: string }
+        piUid: { type: string }
+        username: { type: ["string", "null"] }
+      required: [authenticated, accountId, piUid, username]
+    PiAppSessionState:
+      type: object
+      properties:
+        authenticated: { type: boolean }
+        accountId: { type: ["string", "null"] }
+        piUid: { type: ["string", "null"] }
+        username: { type: ["string", "null"] }
+      required: [authenticated]
+    PiSessionDeletion:
+      type: object
+      properties:
+        ok: { type: boolean, const: true }
+      required: [ok]
+    PiIframeSessionInput:
+      type: object
+      properties:
+        accessToken: { type: string, minLength: 1, maxLength: 4096 }
+        intent: { type: string, enum: ["sign-in", "sign-up"] }
+      required: [accessToken, intent]
+    PiIframeSession:
+      type: object
+      properties:
+        sessionToken: { type: string, minLength: 43, maxLength: 43 }
+        expiresAt: { type: string, format: date-time }
+      required: [sessionToken, expiresAt]
+    PiIframeIdentity:
+      type: object
+      properties:
+        uid: { type: string, minLength: 1 }
+        username: { type: ["string", "null"], maxLength: 80 }
+      required: [uid, username]
+    PiAccountStatus:
+      type: object
+      properties:
+        linked: { type: boolean }
+      required: [linked]
+    PiPaymentCompletion:
+      type: object
+      properties:
+        paymentId: { type: string, minLength: 1 }
+        txid: { type: string, minLength: 1 }
+        purpose: { type: string, enum: [escrow_service_deposit] }
+      required: [paymentId]
+    PiApproval:
+      type: object
+      properties:
+        approved: { type: boolean }
+        idempotent: { type: boolean }
+      required: [approved]
+    PiFundingResult:
+      type: object
+      properties:
+        funded: { type: boolean }
+        idempotent: { type: boolean }
+        confirmed: { type: boolean }
+        productName: { type: string }
+      required: [funded]
+    EscrowServiceDepositMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        type: { type: string, const: escrow }
+      required: [type]
+    EscrowServiceDepositIntent:
+      type: object
+      properties:
+        productName: { type: string, const: "Escrow Service Deposit" }
+        description: { type: string, const: "Secure funds held in escrow for freelance service" }
+        amount: { type: number, const: 1 }
+        memo: { type: string, const: "Escrow deposit for job agreement" }
+        metadata: { $ref: "#/components/schemas/EscrowServiceDepositMetadata" }
+      required: [productName, description, amount, memo, metadata]
+    EscrowServiceDeposit:
+      type: object
+      properties:
+        paymentId: { type: string }
+        productName: { type: string, const: "Escrow Service Deposit" }
+        description: { type: string, const: "Secure funds held in escrow for freelance service" }
+        amount: { type: number, const: 1 }
+        memo: { type: string, const: "Escrow deposit for job agreement" }
+        metadata: { $ref: "#/components/schemas/EscrowServiceDepositMetadata" }
+        network: { type: string, const: "Pi Network" }
+        status: { type: string, enum: [pending, approved, confirmed] }
+        txid: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [paymentId, productName, description, amount, memo, metadata, network, status, txid, createdAt]
+    PayoutPending:
+      type: object
+      properties:
+        payoutIntentId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [creating, created, submitting, submitted, completing, pending, broadcasting, confirmed, manual_reconciliation, failed]
+      required: [payoutIntentId, status]
+    AdminPayout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        contractId: { type: string, format: uuid }
+        disputeId: { type: ["string", "null"] }
+        purpose: { type: string, enum: [standard_release, arbitration_release, arbitration_refund] }
+        status: { type: string }
+        amount: { type: string, pattern: "^[0-9]+(?:\\.[0-9]{1,8})?$" }
+        platformFee: { type: string, pattern: "^[0-9]+(?:\\.[0-9]{1,8})?$" }
+        inviterReward: { type: string, pattern: "^[0-9]+(?:\\.[0-9]{1,8})?$" }
+        sellerAmount: { type: string, pattern: "^[0-9]+(?:\\.[0-9]{1,8})?$" }
+        paymentId: { type: ["string", "null"] }
+        txid: { type: ["string", "null"] }
+        network: { type: string, enum: ["Pi Network", "Pi Testnet"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, contractId, disputeId, purpose, status, amount, platformFee, inviterReward, sellerAmount, paymentId, txid, network, createdAt, updatedAt]
+    AdminPayoutReconciliation:
+      type: object
+      properties:
+        incompleteServerPayments: { type: integer, minimum: 0 }
+        inspected: { type: integer, minimum: 0 }
+        outcomes:
+          type: array
+          items:
+            type: object
+            properties:
+              intentId: { type: string, format: uuid }
+              status: { type: string }
+            required: [intentId, status]
+      required: [incompleteServerPayments, inspected, outcomes]
+    AdminAccess:
+      type: object
+      properties:
+        adminPasswordAuthenticated: { type: boolean }
+      required: [adminPasswordAuthenticated]
+    AdminSessionInput:
+      type: object
+      properties:
+        password: { type: string, minLength: 1, maxLength: 512 }
+      required: [password]
+    AdminSessionResult:
+      type: object
+      properties:
+        authenticated: { type: boolean, const: true }
+        sessionToken: { type: string, minLength: 1 }
+      required: [authenticated]
+    AdminOverview:
+      type: object
+      properties:
+        openDisputes: { type: integer, minimum: 0 }
+        resolvedDisputes: { type: integer, minimum: 0 }
+        disputedContracts: { type: integer, minimum: 0 }
+        payoutAttention: { type: integer, minimum: 0 }
+        totalEscrowPi: { type: string }
+        payoutEnabled: { type: boolean }
+      required: [openDisputes, resolvedDisputes, disputedContracts, payoutAttention, totalEscrowPi, payoutEnabled]
+    AdminDispute:
+      type: object
+      properties:
+        id: { type: string }
+        contractId: { type: string, format: uuid }
+        reason: { type: string }
+        description: { type: string }
+        requestedResolution: { type: string }
+        resolution: { type: ["string", "null"] }
+        status: { type: string, enum: [open, under_review, resolved] }
+        decision: { type: ["string", "null"], enum: [release, refund, null] }
+        contractTitle: { type: string }
+        contractReference: { type: string }
+        contractAmount: { type: string }
+        contractCurrency: { type: string }
+        contractStatus: { type: string }
+        buyerName: { type: string }
+        sellerName: { type: string }
+        payoutStatus: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, contractId, reason, description, requestedResolution, resolution, status, decision, contractTitle, contractReference, contractAmount, contractCurrency, contractStatus, buyerName, sellerName, payoutStatus, createdAt, updatedAt]
+    AdminAnalysis:
+      type: object
+      properties:
+        summary: { type: string }
+        recommendation: { type: string, enum: [release, refund, review] }
+        rationale:
+          type: array
+          items: { type: string }
+        evidenceGaps:
+          type: array
+          items: { type: string }
+        confidence: { type: string, enum: [low, medium, high] }
+        generatedAt: { type: string, format: date-time }
+      required: [summary, recommendation, rationale, evidenceGaps, confidence, generatedAt]
+    AdminDecisionInput:
+      type: object
+      properties:
+        decision: { type: string, enum: [release, refund] }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        confirmation: { type: string, enum: [RELEASE, REFUND] }
+      required: [decision, reason, confirmation]
+    AdminDecisionResult:
+      type: object
+      properties:
+        disputeId: { type: string }
+        contractId: { type: string, format: uuid }
+        decision: { type: string, enum: [release, refund] }
+        payoutIntentId: { type: string, format: uuid }
+        status: { type: string, enum: [creating, created, submitting, submitted, completing, confirmed, manual_reconciliation, failed] }
+        paymentId: { type: ["string", "null"] }
+        txid: { type: ["string", "null"] }
+      required: [disputeId, contractId, decision, payoutIntentId, status, paymentId, txid]
+    MonthlyBadgeIntent:
+      type: object
+      properties:
+        intentId: { type: string, format: uuid }
+        amount: { type: number, const: 2 }
+        memo: { type: string }
+        metadata:
+          type: object
+          properties:
+            badgeAuditId: { type: string, format: uuid }
+            billingMonth: { type: string, format: date }
+          required: [badgeAuditId, billingMonth]
+      required: [intentId, amount, memo, metadata]
+    MonthlyBadgeStatus:
+      type: object
+      properties:
+        billingMonth: { type: string, format: date }
+        status:
+          type: ["string", "null"]
+          enum: [pending, confirmed, manual_reconciliation, null]
+        confirmed: { type: boolean }
+      required: [billingMonth, status, confirmed]
+    PaymentIntent:
+      type: object
+      properties:
+        contractId: { type: string }
+        amount: { type: number, exclusiveMinimum: 0 }
+        transactionFeePercentage:
+          type: number
+          minimum: 0
+          exclusiveMaximum: 100
+          description: Current seller-side payout fee in percentage points; 3 means 3 percent.
+        memo: { type: string }
+        metadata:
+          type: object
+          properties:
+            contractId: { type: string }
+            feeType: { type: string, enum: [dispute] }
+          required: [contractId]
+      required: [contractId, amount, memo, metadata]
+    Listing:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        pipeline: { type: string, enum: [digital, shippable, local_property, custom_terms] }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, title, description, amount, currency, pipeline, metadata, createdAt]
+    ListingInput:
+      type: object
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        amount: { type: number, exclusiveMinimum: 0 }
+        currency: { type: string, pattern: "^(?:[Pp][Ii]|[A-Za-z]{3})$" }
+        pipeline: { type: string, enum: [digital, shippable, local_property, custom_terms] }
+        metadata: { type: object, additionalProperties: true }
+      required: [title, description, amount, currency, pipeline, metadata]
+    ListingContractInput:
+      type: object
+      properties:
+        dueDate: { type: string, format: date }
+      required: [dueDate]
+    EvidenceUploadInput:
+      type: object
+      properties:
+        category: { type: string, enum: [receipt, deed, title, deliverable] }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        contentType:
+          type: string
+          enum: [application/pdf, image/avif, image/gif, image/jpeg, image/png, image/webp]
+        sizeBytes: { type: integer, minimum: 1, maximum: 10485760 }
+      required: [category, filename, contentType, sizeBytes]
+    EvidenceConfirmationInput:
+      type: object
+      properties:
+        category: { type: string, enum: [receipt, deed, title, deliverable] }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        contentType:
+          type: string
+          enum: [application/pdf, image/avif, image/gif, image/jpeg, image/png, image/webp]
+        sizeBytes: { type: integer, minimum: 1, maximum: 10485760 }
+        objectKey: { type: string, minLength: 1, maxLength: 2048 }
+      required: [category, filename, contentType, sizeBytes, objectKey]
+    EvidenceUploadUrl:
+      type: object
+      properties:
+        uploadUrl: { type: string, format: uri }
+        objectKey: { type: string }
+        expiresIn: { type: integer }
+      required: [uploadUrl, objectKey, expiresIn]
+    EvidenceMetadata:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        contract_id: { type: string }
+        uploader_id: { type: string }
+        category: { type: string, enum: [receipt, deed, title, deliverable] }
+        file_name: { type: string }
+        content_type: { type: string }
+        size_bytes: { type: integer }
+        created_at: { type: string, format: date-time }
+      required: [id, contract_id, uploader_id, category, file_name, content_type, size_bytes, created_at]
+    EvidenceConfirmation:
+      type: object
+      properties:
+        evidence: { $ref: "#/components/schemas/EvidenceMetadata" }
+      required: [evidence]
+    EvidenceList:
+      type: object
+      properties:
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/EvidenceMetadata" }
+      required: [evidence]
+    MarketStats:
+      type: object
+      properties:
+        listings: { type: integer }
+        contracts: { type: integer }
+        completedContracts: { type: integer }
+        escrowVolume: { type: number }
+        escrowVolumeCurrency: { type: string, const: PI }
+      required: [listings, contracts, completedContracts, escrowVolume, escrowVolumeCurrency]
+    PublicPiTransaction:
+      type: object
+      additionalProperties: false
+      properties:
+        transactionId: { type: string, minLength: 1 }
+        amountPi: { type: string, minLength: 1 }
+        network:
+          type: ["string", "null"]
+          enum: ["Pi Network", "Pi Testnet", null]
+        direction: { type: string, enum: [received, sent] }
+        status: { type: string, const: confirmed }
+        recordedAt: { type: string, format: date-time }
+      required: [transactionId, amountPi, network, direction, status, recordedAt]
+    PublicPiTransactionFeed:
+      type: object
+      additionalProperties: false
+      properties:
+        transactions:
+          type: array
+          items: { $ref: "#/components/schemas/PublicPiTransaction" }
+        complete: { type: boolean }
+      required: [transactions, complete]
+    DeliveryInput:
+      type: object
+      properties:
+        digitalLinks: { type: array, items: { type: string, format: uri } }
+        filePaths: { type: array, items: { type: string } }
+        carrier: { type: string }
+        trackingNumber: { type: string }
+        receiptObjectPath: { type: string }
+        physicalAddress: { type: string }
+        mapUrl: { type: string, format: uri }
+        deedReference: { type: string }
+        titleReference: { type: string }
+        eSignatures: { type: array, items: { type: string } }
+        goals: { type: array, items: { type: string, minLength: 1 } }
+      required: []
+    Delivery:
+      type: object
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        submitterId: { type: string }
+        evidence: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, contractId, submitterId, evidence, createdAt]
+    SignatureInput:
+      type: object
+      properties:
+        documentHash: { type: string, minLength: 1 }
+        consent: { type: boolean, const: true }
+      required: [documentHash, consent]
+    Signature:
+      type: object
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        signerId: { type: string }
+        documentHash: { type: string }
+        signedAt: { type: string, format: date-time }
+      required: [id, contractId, signerId, documentHash, signedAt]
+    ChatMessageInput:
+      type: object
+      properties:
+        content: { type: string, minLength: 1, maxLength: 5000 }
+        targetLanguage: { type: string, minLength: 2, maxLength: 20 }
+      required: [content]
+    ChatMessage:
+      type: object
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        senderId: { type: string }
+        content: { type: string }
+        sourceText: { type: string }
+        translatedText: { type: ["string", "null"] }
+        targetLanguage: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+      required: [id, contractId, senderId, content, sourceText, translatedText, targetLanguage, createdAt]
+    ChatLanguage:
+      type: string
+      enum: [en, ar, zh-CN, id, vi]
+    PublicChatRoomInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        languageCode: { $ref: "#/components/schemas/ChatLanguage" }
+      required: [name, languageCode]
+    PublicChatRoomUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 60 }
+        active: { type: boolean }
+    PublicChatRoom:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        languageCode: { $ref: "#/components/schemas/ChatLanguage" }
+        active: { type: boolean }
+      required: [id, name, languageCode, active]
+    AdminChatModerator:
+      type: object
+      properties:
+        userId: { type: string }
+        displayName: { type: string }
+        assignedAt: { type: string, format: date-time }
+      required: [userId, displayName, assignedAt]
+    AdminPublicChatRoom:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        languageCode: { $ref: "#/components/schemas/ChatLanguage" }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        moderators:
+          type: array
+          items: { $ref: "#/components/schemas/AdminChatModerator" }
+      required: [id, name, languageCode, active, createdAt, moderators]
+    AdminChatMember:
+      type: object
+      properties:
+        userId: { type: string }
+        displayName: { type: string }
+      required: [userId, displayName]
+    PublicChatMessageInput:
+      type: object
+      additionalProperties: false
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        targetLanguage: { $ref: "#/components/schemas/ChatLanguage" }
+      required: [content, targetLanguage]
+    PublicChatMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        roomId: { type: string, format: uuid }
+        senderName: { type: string }
+        content: { type: ["string", "null"] }
+        sourceLanguage: { $ref: "#/components/schemas/ChatLanguage" }
+        translatedText: { type: ["string", "null"] }
+        translationStatus:
+          type: string
+          enum: [translated, same_language, unavailable]
+        createdAt: { type: string, format: date-time }
+        isDeleted: { type: boolean }
+        isOwn: { type: boolean }
+      required: [id, roomId, senderName, content, sourceLanguage, translatedText, translationStatus, createdAt, isDeleted, isOwn]
+    PublicChatMessagePage:
+      type: object
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/PublicChatMessage" }
+        nextCursor: { type: ["string", "null"] }
+        canModerate: { type: boolean }
+      required: [messages, nextCursor, canModerate]
+    ProfileInput:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        bio: { type: string, maxLength: 1000 }
+        walletAddress: { type: string, minLength: 1 }
+        inviteCode: { type: string }
+      required: [displayName]
+    Profile:
+      type: object
+      properties:
+        userId: { type: string }
+        displayName: { type: string }
+        bio: { type: string }
+        walletAddress: { type: ["string", "null"] }
+        referralCode: { type: string }
+        referralBalance: { type: number }
+      required: [userId, displayName, bio, walletAddress, referralCode, referralBalance]
+    TestnetWallet:
+      type: object
+      properties:
+        network: { type: string, enum: ["Pi Testnet"] }
+        address: { type: string, pattern: "^pi-trust-test-[a-f0-9]{20}$" }
+        balance: { type: number, minimum: 0 }
+        lastFaucetClaimAt: { type: ["string", "null"], format: date-time }
+        faucetCooldownRemainingSeconds: { type: integer, minimum: 0 }
+        transactions:
+          type: array
+          items: { $ref: "#/components/schemas/TestnetWalletTransaction" }
+      required: [network, address, balance, lastFaucetClaimAt, faucetCooldownRemainingSeconds, transactions]
+    TestnetWalletTransaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        groupId: { type: string, format: uuid }
+        type: { type: string, enum: [faucet_claim, transfer, escrow_funding, escrow_release, escrow_refund] }
+        direction: { type: string, enum: [credit, debit] }
+        amount: { type: number, exclusiveMinimum: 0 }
+        balanceAfter: { type: number, minimum: 0 }
+        status: { type: string, enum: [completed, pending] }
+        counterpartyAddress: { type: ["string", "null"] }
+        contractId: { type: ["string", "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+      required: [id, groupId, type, direction, amount, balanceAfter, status, counterpartyAddress, contractId, createdAt]
+    TestnetWalletTransferInput:
+      type: object
+      properties:
+        recipient: { type: string, minLength: 1, maxLength: 120 }
+        amount: { type: number, exclusiveMinimum: 0, maximum: 1000000000000 }
+        requestId: { type: string, format: uuid }
+      required: [recipient, amount, requestId]
+    TestnetWalletTransfer:
+      type: object
+      properties:
+        groupId: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        amount: { type: number, exclusiveMinimum: 0 }
+        balance: { type: number, minimum: 0 }
+        status: { type: string, enum: [completed] }
+      required: [groupId, transactionId, amount, balance, status]
+    TestnetFaucetClaim:
+      type: object
+      properties:
+        amount: { type: number, enum: [100] }
+        balance: { type: number, minimum: 100 }
+        nextClaimAt: { type: string, format: date-time }
+        transactionId: { type: string, format: uuid }
+      required: [amount, balance, nextClaimAt, transactionId]
+    TestnetFaucetClaimBlocked:
+      type: object
+      properties:
+        error: { type: string }
+        reason: { type: string, enum: [cooldown, balance_too_high] }
+        remainingSeconds: { type: integer, minimum: 0 }
+        balance: { type: number, minimum: 0 }
+      required: [error, reason, remainingSeconds, balance]
+    ReferralSummary:
+      type: object
+      properties:
+        referralCode: { type: string }
+        referralBalance: { type: number }
+        invitedUsers: { type: integer }
+      required: [referralCode, referralBalance, invitedUsers]
+    DisputeResolutionInput:
+      type: object
+      properties:
+        resolution: { type: string, minLength: 1 }
+      required: [resolution]
+
