@@ -5,6 +5,10 @@ import {
   CreateDisputeBody,
   CreateDisputeParams,
   CreateDisputeResponse,
+  ListNotificationsResponse,
+  MarkNotificationReadResponse,
+  CancelUnfundedContractParams,
+  CancelUnfundedContractResponse,
   GetContractParams,
   GetContractResponse,
   GetDashboardSummaryResponse,
@@ -37,6 +41,7 @@ const router: IRouter = Router();
 router.use("/dashboard", requireSession);
 router.use("/contracts", requireSession);
 router.use("/activity", requireSession);
+router.use("/notifications", requireSession);
 
 function ownedContractsPath(userId: string): string {
   const id = encodeURIComponent(userId);
@@ -46,6 +51,52 @@ function ownedContractsPath(userId: string): string {
 function pathParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
+
+router.post("/contracts/:id/cancel", async (req, res): Promise<void> => {
+  const params = CancelUnfundedContractParams.safeParse({ id: pathParam(req.params.id) });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const actor = authenticatedUserId(req);
+  if (!actor) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  try {
+    const results = await supabaseRequest<Array<{ success: boolean; reason: string }>>(
+      "rpc/cancel_unfunded_escrow_contract",
+      {
+        method: "POST",
+        body: JSON.stringify({ p_contract_id: params.data.id, p_actor_id: actor }),
+      },
+    );
+    const result = results[0];
+    if (!result) {
+      res.status(503).json({ error: "Cancellation did not return a database result" });
+      return;
+    }
+    if (!result.success) {
+      const status = result.reason === "contract_not_found" ? 404 :
+        result.reason === "not_participant" ? 403 : 409;
+      const messages: Record<string, string> = {
+        contract_not_found: "Contract not found",
+        not_participant: "Only a contract participant can cancel it",
+        contract_not_cancellable: "Only an unfunded contract can be cancelled directly",
+        funding_payment_active: "A funding payment is active or has already been confirmed",
+      };
+      res.status(status).json({ error: messages[result.reason] ?? "Contract could not be cancelled" });
+      return;
+    }
+    res.json(CancelUnfundedContractResponse.parse({
+      cancelled: true,
+      contractId: params.data.id,
+      status: "cancelled",
+    }));
+  } catch (error) {
+    res.status(isSupabaseError(error) ? 503 : 500).json({ error: "Could not cancel this contract" });
+  }
+});
 
 function errorMessage(error: unknown): string {
   if (isSupabaseError(error)) {
@@ -96,6 +147,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     );
     const lockedStatuses: ContractStatus[] = [
       "funded",
+      "submitted",
       "in_delivery",
       "disputed",
     ];
@@ -103,11 +155,11 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
       .filter((contract) => lockedStatuses.includes(contract.status))
       .reduce((sum, contract) => sum + Number(contract.amount), 0);
     const pendingRelease = contracts
-      .filter((contract) => contract.status === "in_delivery")
+      .filter((contract) => contract.status === "submitted" || contract.status === "in_delivery")
       .reduce((sum, contract) => sum + Number(contract.amount), 0);
     const activeContracts = contracts.filter(
       (contract) =>
-        !["completed", "resolved", "cancelled"].includes(contract.status),
+        !["completed", "resolved", "refunded", "cancelled"].includes(contract.status),
     ).length;
     const completedContracts = contracts.filter((contract) =>
       ["completed", "resolved"].includes(contract.status),
@@ -186,10 +238,12 @@ async function updateContract(
   id: string,
   status: ContractStatus,
   note?: string | null,
+  expectedStatus?: ContractStatus,
 ): Promise<void> {
   const now = new Date().toISOString();
   const rows = await supabaseRequest<ContractRow[]>(
-    `escrow_contracts?id=eq.${encodeURIComponent(id)}`,
+    `escrow_contracts?id=eq.${encodeURIComponent(id)}` +
+      (expectedStatus ? `&status=eq.${encodeURIComponent(expectedStatus)}` : ""),
     {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
@@ -203,15 +257,26 @@ async function updateContract(
   );
 
   if (!rows[0]) {
-    res.status(404).json({ error: "Contract not found" });
+    res.status(expectedStatus ? 409 : 404).json({
+      error: expectedStatus
+        ? "Contract status changed before the requested transition"
+        : "Contract not found",
+    });
     return;
   }
 
   const activity = statusActivity(status);
-  await addActivity(id, {
-    ...activity,
-    description: note?.trim() || activity.description,
-  });
+  try {
+    await addActivity(id, {
+      ...activity,
+      description: note?.trim() || activity.description,
+    });
+  } catch (error) {
+    req.log.warn(
+      { contractId: id, errorType: error instanceof Error ? error.name : "unknown" },
+      "Contract status changed but its activity entry could not be written",
+    );
+  }
   res.json(mapContract(rows[0]));
 }
 
@@ -304,18 +369,19 @@ router.post("/contracts/:id/confirm-delivery", async (req, res): Promise<void> =
       res.status(404).json({ error: "Contract not found" });
       return;
     }
-    if (contract.status !== "funded") {
-      res.status(409).json({ error: "Only confirmed funded contracts can enter delivery" });
+    if (contract.status !== "submitted") {
+      res.status(409).json({ error: "Only a seller-submitted delivery can be confirmed" });
       return;
     }
     const evidence = await supabaseRequest<Array<{ id: string }>>(
-      `escrow_delivery_evidence?contract_id=eq.${encodeURIComponent(id)}&select=id&limit=1`,
+      `escrow_delivery_evidence?contract_id=eq.${encodeURIComponent(id)}` +
+        `&submitter_id=eq.${encodeURIComponent(contract.seller_id)}&select=id&limit=1`,
     );
     if (!evidence.length) {
-      res.status(409).json({ error: "Pipeline delivery evidence must be validated before confirming delivery" });
+      res.status(409).json({ error: "Seller delivery evidence must be validated before confirming delivery" });
       return;
     }
-    await updateContract(req, res, id, "in_delivery");
+    await updateContract(req, res, id, "in_delivery", undefined, "submitted");
   } catch (error) {
     req.log.error({ err: error }, "Failed to confirm delivery");
     res.status(500).json({ error: errorMessage(error) });
@@ -450,11 +516,79 @@ router.get("/activity", async (req, res): Promise<void> => {
       if (!isMissingSupabaseTable(error)) {
         throw error;
       }
+        req.log.warn({ reason: "missing_activity_table" }, "Escrow activity is not provisioned; returning an empty list");
       rows = [];
     }
     res.json(ListActivityResponse.parse(rows.map(mapActivity)));
   } catch (error) {
     req.log.error({ err: error }, "Failed to list activity");
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+type NotificationRow = {
+  id: string;
+  contract_id: string;
+  type: string;
+  title: string;
+  message: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+function mapNotification(row: NotificationRow) {
+  return {
+    id: row.id,
+    contractId: row.contract_id,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    createdAt: row.created_at,
+    readAt: row.read_at,
+  };
+}
+
+router.get("/notifications", async (req, res): Promise<void> => {
+  const actor = authenticatedUserId(req);
+  if (!actor) { res.status(401).json({ error: "Authentication required" }); return; }
+  try {
+    const rows = await supabaseRequest<NotificationRow[]>(
+      `escrow_notifications?user_id=eq.${encodeURIComponent(actor)}&select=id,contract_id,type,title,message,created_at,read_at&order=created_at.desc&limit=50`,
+    );
+    res.json(ListNotificationsResponse.parse(rows.map(mapNotification)));
+  } catch (error) {
+    if (isMissingSupabaseTable(error)) {
+      res.status(503).json({
+        error: "In-app notification storage is not installed; apply the pending escrow notification migration",
+      });
+      return;
+    }
+    req.log.error({ err: error }, "Failed to list in-app notifications");
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.patch("/notifications/:id/read", async (req, res): Promise<void> => {
+  const actor = authenticatedUserId(req);
+  if (!actor) { res.status(401).json({ error: "Authentication required" }); return; }
+  const id = pathParam(req.params.id);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    res.status(400).json({ error: "A valid notification ID is required" });
+    return;
+  }
+  try {
+    const rows = await supabaseRequest<NotificationRow[]>(
+      `escrow_notifications?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(actor)}&select=id,contract_id,type,title,message,created_at,read_at`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ read_at: new Date().toISOString() }),
+      },
+    );
+    if (!rows[0]) { res.status(404).json({ error: "Notification not found" }); return; }
+    res.json(MarkNotificationReadResponse.parse(mapNotification(rows[0])));
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to mark notification as read");
     res.status(500).json({ error: errorMessage(error) });
   }
 });

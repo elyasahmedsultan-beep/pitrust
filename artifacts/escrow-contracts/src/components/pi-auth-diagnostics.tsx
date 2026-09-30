@@ -453,7 +453,7 @@ export function PiAuthDiagnosticsPanel({
     ["POST /api/pi/session", snapshot.flow.api],
     ["Clerk sign_in", snapshot.flow.signIn],
     ["setActive", snapshot.flow.setActive],
-    ["Clerk.session", snapshot.flow.session],
+    ["جلسة تطبيق Pi", snapshot.flow.session],
     ["Clerk.user", snapshot.flow.user],
     ["Clerk touch", snapshot.flow.touch],
   ];

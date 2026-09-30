@@ -159,8 +159,11 @@ html[dir="rtl"] input[type="number"] { direction: ltr; text-align: right; }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes route-loading { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .animate-rise-in { animation: rise-in 420ms cubic-bezier(.2,.8,.2,1) both; }
 .skeleton { background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--card)) 50%, hsl(var(--muted)) 75%); background-size: 200% 100%; animation: shimmer 1.3s ease-in-out infinite; }
+.route-loading-indicator { position: fixed; inset: 0 0 auto; z-index: 50; height: 3px; overflow: hidden; pointer-events: none; background: hsl(var(--primary) / .18); }
+.route-loading-indicator__bar { display: block; width: 35%; height: 100%; background: hsl(var(--accent)); animation: route-loading 800ms ease-in-out infinite; }
 .shell-noise::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .035; z-index: 20; background-image: radial-gradient(circle at 20% 30%, rgba(255,255,255,.18) 0 1px, transparent 1px), radial-gradient(circle at 70% 80%, rgba(255,255,255,.12) 0 1px, transparent 1px); background-size: 19px 23px, 27px 31px; }
 
 .landing-grid {
@@ -188,4 +191,7 @@ html[dir="rtl"] input[type="number"] { direction: ltr; text-align: right; }
 .admin-primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; padding: 11px 17px; background: #00c853; color: #07130b; font-size: 13px; font-weight: 700; transition: background .2s; }
 .admin-primary-button:hover:not(:disabled) { background: #1de9b6; }
 .admin-primary-button:disabled { opacity: .45; cursor: not-allowed; }
-@media (prefers-reduced-motion: reduce) { .animate-rise-in, .skeleton { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise-in, .skeleton, .route-loading-indicator__bar { animation: none; }
+  .route-loading-indicator__bar { width: 100%; }
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { SignInButton } from '@clerk/react';
 import { AlertTriangle, ArrowRight, Check, ChevronRight, CircleDot, FileText, Gavel, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Wallet, X } from 'lucide-react';
 import {
   getGetAdminAccessQueryKey, getGetAdminOverviewQueryKey, getListAdminDisputesQueryKey, getListAdminPayoutsQueryKey,
@@ -9,10 +10,11 @@ import {
 } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { useI18n } from '@/i18n';
-import { AppShell } from '@/components/app-shell';
+import { ClerkAppShell } from '@/components/clerk-app-shell';
 import AdminPasswordGate from '@/components/admin-password-gate';
 import { usePiIframeSession } from '@/lib/pi-iframe-session';
 import ChatAdminManagement from '@/components/chat-admin-management';
+import AdminListingAdFeeSettings from '@/components/admin-listing-ad-fee-settings';
 
 const copy = {
   en: {
@@ -67,10 +69,8 @@ function failure(error: unknown, fallback: string, c: typeof copy.en | typeof co
 }
 
 export default function AdminDashboard() {
-  const { language } = useI18n();
-  const c = language === 'ar' ? copy.ar : copy.en;
   const queryClient = useQueryClient();
-  const access = useGetAdminAccess({ query: { queryKey: getGetAdminAccessQueryKey(), refetchInterval: 30000, refetchOnWindowFocus: true, retry: false } });
+  const access = useGetAdminAccess({ query: { queryKey: getGetAdminAccessQueryKey(), refetchInterval: (query) => query.state.status === 'error' ? false : 30000, refetchOnWindowFocus: false, retry: false } });
   useEffect(() => {
     if (!access.data?.adminPasswordAuthenticated || access.isError) {
       queryClient.removeQueries({ queryKey: getGetAdminOverviewQueryKey() });
@@ -78,12 +78,15 @@ export default function AdminDashboard() {
       queryClient.removeQueries({ queryKey: getListAdminPayoutsQueryKey() });
     }
   }, [access.data?.adminPasswordAuthenticated, access.isError, queryClient]);
-  if (access.isLoading) return <div className="space-y-6" data-testid="loading-admin"><div className="skeleton h-24 rounded-xl" /><div className="grid gap-4 sm:grid-cols-3">{[1,2,3].map(i => <div key={i} className="skeleton h-28 rounded-xl" />)}</div><div className="skeleton h-96 rounded-xl" /></div>;
-  if (access.isError || !access.data) {
-    return <StatePanel title={c.unavailable} body={c.unavailableBody} action={c.retry} onRetry={() => access.refetch()} testId="admin-unavailable" />;
+  if (access.data?.adminPasswordAuthenticated && !access.isError) {
+    return <ClerkAppShell><ArbitrationWorkspace /></ClerkAppShell>;
   }
-  if (!access.data.adminPasswordAuthenticated) return <AdminPasswordGate />;
-  return <AppShell><ArbitrationWorkspace /></AppShell>;
+  return (
+    <AdminPasswordGate
+      sessionCheckFailed={access.isError}
+      onRetrySessionCheck={() => { void access.refetch(); }}
+    />
+  );
 }
 
 function StatePanel({ title, body, action, onRetry, testId }: { title: string; body: string; action?: string; onRetry?: () => void; testId: string }) {
@@ -95,9 +98,9 @@ function ArbitrationWorkspace() {
   const c = language === 'ar' ? copy.ar : copy.en;
   const qc = useQueryClient();
   const { setAdminSessionToken } = usePiIframeSession();
-  const overview = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey(), refetchInterval: 30000, retry: false } });
-  const disputes = useListAdminDisputes({ query: { queryKey: getListAdminDisputesQueryKey(), refetchInterval: 30000, retry: false } });
-  const payouts = useListAdminPayouts({ query: { queryKey: getListAdminPayoutsQueryKey(), refetchInterval: 30000, retry: false } });
+  const overview = useGetAdminOverview({ query: { queryKey: getGetAdminOverviewQueryKey(), refetchInterval: (query) => query.state.status === 'error' ? false : 30000, retry: false } });
+  const disputes = useListAdminDisputes({ query: { queryKey: getListAdminDisputesQueryKey(), refetchInterval: (query) => query.state.status === 'error' ? false : 30000, retry: false } });
+  const payouts = useListAdminPayouts({ query: { queryKey: getListAdminPayoutsQueryKey(), refetchInterval: (query) => query.state.status === 'error' ? false : 30000, retry: false } });
   const analyze = useAnalyzeAdminDispute();
   const decide = useDecideAdminDispute();
   const reconcile = useReconcileAdminPayouts();
@@ -202,7 +205,7 @@ function ArbitrationWorkspace() {
         <button className="admin-soft-button" onClick={refresh} data-testid="button-refresh-admin"><RefreshCw size={15}/>{c.refresh}<span className="hidden border-s border-[#4a6050] ps-3 text-[11px] font-normal text-[#91a699] sm:inline">{c.last}</span></button>
       </div>
     </div>
-    <p className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-[#594c33] bg-[#241f16] p-3 text-xs leading-5 text-[#e4c795]" role="note" data-testid="note-clerk-payout-auth"><LockKeyhole size={14}/>{c.clerkPayoutRequired}<Link href="/sign-in" className="font-semibold text-[#b9e7c5] underline underline-offset-4">{c.signInClerk}</Link></p>
+     <p className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-[#594c33] bg-[#241f16] p-3 text-xs leading-5 text-[#e4c795]" role="note" data-testid="note-clerk-payout-auth"><LockKeyhole size={14}/>{c.clerkPayoutRequired}<SignInButton mode="modal" withSignUp={false} fallbackRedirectUrl={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/admin`}><button type="button" className="font-semibold text-[#b9e7c5] underline underline-offset-4">{c.signInClerk}</button></SignInButton></p>
     {mutationError && <p role="alert" className="mt-4 text-sm text-[#ffc19b]" data-testid="error-admin-session">{mutationError}</p>}
     <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-5">
       {([
@@ -212,6 +215,7 @@ function ArbitrationWorkspace() {
       <div className="admin-panel col-span-2 min-w-0 border-[#316e48] bg-[#183423] p-4 sm:p-5 lg:col-span-1"><div className="flex items-center justify-between gap-2"><span className="admin-label !text-[#9cd6aa]">{c.escrow}</span><Wallet size={16} className="shrink-0 text-[#73df9d]"/></div><div className="mt-5 truncate font-['Syne'] text-2xl font-semibold" data-testid="stat-admin-escrow">{amount(overview.data.totalEscrowPi, 'Pi')}</div></div>
     </div>
     <div className="mt-4 flex items-center gap-2 text-xs text-[#a4b7a8]" data-testid="status-payout-enabled"><CircleDot size={14} className={overview.data.payoutEnabled ? 'text-[#62d28e]' : 'text-[#e5b879]'}/>{overview.data.payoutEnabled ? c.enabled : c.disabled}</div>
+    <AdminListingAdFeeSettings />
 
     <section className="mt-12" aria-labelledby="queue-title">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><p className="admin-label text-[#1de9b6]">01 / {c.review}</p><h2 id="queue-title" className="mt-2 font-['Syne'] text-2xl font-semibold sm:text-3xl">{c.queue}</h2><p className="mt-2 text-sm text-[#96a99c]">{c.queueSub}</p></div><div className="flex rounded-lg border border-[#364d3d] bg-[#121a15] p-1" role="group" aria-label={c.queue}><button onClick={()=>{setFilter('active');setSelectedId(null)}} aria-pressed={filter==='active'} className={`rounded-md px-3 py-2 text-xs font-semibold ${filter==='active'?'bg-[#254733] text-[#b7edc8]':'text-[#91a699]'}`} data-testid="button-filter-active">{c.active}</button><button onClick={()=>{setFilter('all');setSelectedId(null)}} aria-pressed={filter==='all'} className={`rounded-md px-3 py-2 text-xs font-semibold ${filter==='all'?'bg-[#254733] text-[#b7edc8]':'text-[#91a699]'}`} data-testid="button-filter-all">{c.all}</button></div></div>

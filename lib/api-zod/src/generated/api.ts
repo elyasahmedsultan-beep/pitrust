@@ -45,12 +45,13 @@ export const ListContractsResponseItem = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -105,12 +106,13 @@ export const GetContractResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -132,6 +134,35 @@ export const UpdateContractStatusResponse = zod.void()
 
 
 /**
+ * @summary Cancel an unfunded contract before any funding payment is active
+ */
+export const CancelUnfundedContractParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const CancelUnfundedContractResponse = zod.object({
+  "cancelled": zod.literal(true),
+  "contractId": zod.string().uuid(),
+  "status": zod.literal("cancelled")
+})
+
+
+/**
+ * @summary Refund a funded Testnet contract to the buyer's internal wallet
+ */
+export const RefundTestnetContractToWalletParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const RefundTestnetContractToWalletResponse = zod.object({
+  "refunded": zod.literal(true),
+  "idempotent": zod.boolean(),
+  "balance": zod.number(),
+  "transactionId": zod.string().uuid()
+})
+
+
+/**
  * @summary Fund a Testnet escrow from the internal wallet balance
  */
 export const FundContractParams = zod.object({
@@ -150,12 +181,13 @@ export const FundContractResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -180,12 +212,13 @@ export const ConfirmDeliveryResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -210,12 +243,13 @@ export const ReleaseFundsResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -240,12 +274,13 @@ export const ReleaseContractToTestnetWalletResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -303,6 +338,44 @@ export const ReconcileAdminPayoutsResponse = zod.object({
  */
 export const GetAdminAccessResponse = zod.object({
   "adminPasswordAuthenticated": zod.boolean()
+})
+
+
+/**
+ * @summary Update the listing publication fee using an admin password session
+ */
+export const updateAdminListingAdFeeBodyListingAdFeePiMin = 1e-8;
+export const updateAdminListingAdFeeBodyListingAdFeePiMax = 1000000;
+
+export const updateAdminListingAdFeeBodyListingEditFeePiMin = 1e-8;
+export const updateAdminListingAdFeeBodyListingEditFeePiMax = 1000000;
+
+export const updateAdminListingAdFeeBodyListingDeleteFeePiMin = 1e-8;
+export const updateAdminListingAdFeeBodyListingDeleteFeePiMax = 1000000;
+
+
+
+export const UpdateAdminListingAdFeeBody = zod.object({
+  "listingAdFeePi": zod.number().min(updateAdminListingAdFeeBodyListingAdFeePiMin).max(updateAdminListingAdFeeBodyListingAdFeePiMax).optional().describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingEditFeePi": zod.number().min(updateAdminListingAdFeeBodyListingEditFeePiMin).max(updateAdminListingAdFeeBodyListingEditFeePiMax).optional().describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingDeleteFeePi": zod.number().min(updateAdminListingAdFeeBodyListingDeleteFeePiMin).max(updateAdminListingAdFeeBodyListingDeleteFeePiMax).optional().describe('Pi amount with up to 8 decimal places; precision is validated by the API.')
+})
+
+export const updateAdminListingAdFeeResponseListingAdFeePiMin = 1e-8;
+export const updateAdminListingAdFeeResponseListingAdFeePiMax = 1000000;
+
+export const updateAdminListingAdFeeResponseListingEditFeePiMin = 1e-8;
+export const updateAdminListingAdFeeResponseListingEditFeePiMax = 1000000;
+
+export const updateAdminListingAdFeeResponseListingDeleteFeePiMin = 1e-8;
+export const updateAdminListingAdFeeResponseListingDeleteFeePiMax = 1000000;
+
+
+
+export const UpdateAdminListingAdFeeResponse = zod.object({
+  "listingAdFeePi": zod.number().min(updateAdminListingAdFeeResponseListingAdFeePiMin).max(updateAdminListingAdFeeResponseListingAdFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingEditFeePi": zod.number().min(updateAdminListingAdFeeResponseListingEditFeePiMin).max(updateAdminListingAdFeeResponseListingEditFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingDeleteFeePi": zod.number().min(updateAdminListingAdFeeResponseListingDeleteFeePiMin).max(updateAdminListingAdFeeResponseListingDeleteFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.')
 })
 
 
@@ -583,37 +656,117 @@ export const GetMonthlyBadgeStatusResponse = zod.object({
 
 
 /**
- * @summary Get the fixed Pi payment parameters for the escrow service deposit
+ * @summary Read the current system-controlled listing publication fee
  */
-export const CreateEscrowServiceDepositIntentResponse = zod.object({
-  "productName": zod.literal("Escrow Service Deposit"),
-  "description": zod.literal("Secure funds held in escrow for freelance service"),
-  "amount": zod.literal(1),
-  "memo": zod.literal("Escrow deposit for job agreement"),
+export const getListingAdFeeResponseListingAdFeePiMin = 1e-8;
+export const getListingAdFeeResponseListingAdFeePiMax = 1000000;
+
+export const getListingAdFeeResponseListingEditFeePiMin = 1e-8;
+export const getListingAdFeeResponseListingEditFeePiMax = 1000000;
+
+export const getListingAdFeeResponseListingDeleteFeePiMin = 1e-8;
+export const getListingAdFeeResponseListingDeleteFeePiMax = 1000000;
+
+
+
+export const GetListingAdFeeResponse = zod.object({
+  "listingAdFeePi": zod.number().min(getListingAdFeeResponseListingAdFeePiMin).max(getListingAdFeeResponseListingAdFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingEditFeePi": zod.number().min(getListingAdFeeResponseListingEditFeePiMin).max(getListingAdFeeResponseListingEditFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "listingDeleteFeePi": zod.number().min(getListingAdFeeResponseListingDeleteFeePiMin).max(getListingAdFeeResponseListingDeleteFeePiMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.')
+})
+
+
+/**
+ * @summary Create or resume a Pi payment to publish an owned listing
+ */
+export const CreateListingAdPaymentIntentParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const createListingAdPaymentIntentResponseAmountMin = 1e-8;
+export const createListingAdPaymentIntentResponseAmountMax = 1000000;
+
+
+
+export const CreateListingAdPaymentIntentResponse = zod.object({
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "amount": zod.number().min(createListingAdPaymentIntentResponseAmountMin).max(createListingAdPaymentIntentResponseAmountMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "memo": zod.enum(['Listing publication fee', 'Listing edit fee', 'Listing deletion fee']),
   "metadata": zod.object({
-  "type": zod.literal("escrow")
+  "type": zod.literal("listing_ad"),
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "operation": zod.enum(['publication', 'edit', 'delete']).optional()
 })
 })
 
 
 /**
- * @summary List the current user's confirmed and pending escrow service deposits
+ * @summary Create a Pi payment intent for an owned listing edit
  */
-export const ListEscrowServiceDepositsResponseItem = zod.object({
-  "paymentId": zod.string(),
-  "productName": zod.literal("Escrow Service Deposit"),
-  "description": zod.literal("Secure funds held in escrow for freelance service"),
-  "amount": zod.literal(1),
-  "memo": zod.literal("Escrow deposit for job agreement"),
-  "metadata": zod.object({
-  "type": zod.literal("escrow")
-}),
-  "network": zod.literal("Pi Network"),
-  "status": zod.enum(['pending', 'approved', 'confirmed']),
-  "txid": zod.string().nullable(),
-  "createdAt": zod.coerce.date()
+export const CreateListingEditPaymentIntentParams = zod.object({
+  "id": zod.coerce.string().uuid()
 })
-export const ListEscrowServiceDepositsResponse = zod.array(ListEscrowServiceDepositsResponseItem)
+
+export const createListingEditPaymentIntentBodyTitleMax = 240;
+
+export const createListingEditPaymentIntentBodyDescriptionMax = 10000;
+
+export const createListingEditPaymentIntentBodyAmountExclusiveMin = 0;
+export const createListingEditPaymentIntentBodyAmountMax = 1000000000;
+
+
+
+export const CreateListingEditPaymentIntentBody = zod.object({
+  "title": zod.string().min(1).max(createListingEditPaymentIntentBodyTitleMax).optional(),
+  "description": zod.string().max(createListingEditPaymentIntentBodyDescriptionMax).optional(),
+  "amount": zod.number().gt(createListingEditPaymentIntentBodyAmountExclusiveMin).max(createListingEditPaymentIntentBodyAmountMax).optional().describe('Pi amount with up to 8 decimal places; precision is validated by the API.')
+})
+
+export const createListingEditPaymentIntentResponseAmountMin = 1e-8;
+export const createListingEditPaymentIntentResponseAmountMax = 1000000;
+
+
+
+export const CreateListingEditPaymentIntentResponse = zod.object({
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "amount": zod.number().min(createListingEditPaymentIntentResponseAmountMin).max(createListingEditPaymentIntentResponseAmountMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "memo": zod.enum(['Listing publication fee', 'Listing edit fee', 'Listing deletion fee']),
+  "metadata": zod.object({
+  "type": zod.literal("listing_ad"),
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "operation": zod.enum(['publication', 'edit', 'delete']).optional()
+})
+})
+
+
+/**
+ * @summary Create a Pi payment intent to deactivate an owned listing
+ */
+export const CreateListingDeletePaymentIntentParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const createListingDeletePaymentIntentResponseAmountMin = 1e-8;
+export const createListingDeletePaymentIntentResponseAmountMax = 1000000;
+
+
+
+export const CreateListingDeletePaymentIntentResponse = zod.object({
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "amount": zod.number().min(createListingDeletePaymentIntentResponseAmountMin).max(createListingDeletePaymentIntentResponseAmountMax).describe('Pi amount with up to 8 decimal places; precision is validated by the API.'),
+  "memo": zod.enum(['Listing publication fee', 'Listing edit fee', 'Listing deletion fee']),
+  "metadata": zod.object({
+  "type": zod.literal("listing_ad"),
+  "listingId": zod.string().uuid(),
+  "intentId": zod.string().uuid(),
+  "operation": zod.enum(['publication', 'edit', 'delete']).optional()
+})
+})
 
 
 /**
@@ -637,7 +790,8 @@ export const CreateContractPaymentIntentResponse = zod.object({
   "memo": zod.string(),
   "metadata": zod.object({
   "contractId": zod.string(),
-  "feeType": zod.enum(['dispute']).optional()
+  "feeType": zod.enum(['dispute']).optional(),
+  "type": zod.enum(['contract_funding']).optional()
 })
 })
 
@@ -663,7 +817,8 @@ export const CreateDisputeFeeIntentResponse = zod.object({
   "memo": zod.string(),
   "metadata": zod.object({
   "contractId": zod.string(),
-  "feeType": zod.enum(['dispute']).optional()
+  "feeType": zod.enum(['dispute']).optional(),
+  "type": zod.enum(['contract_funding']).optional()
 })
 })
 
@@ -737,6 +892,39 @@ export const ListActivityResponse = zod.array(ListActivityResponseItem)
 
 
 /**
+ * @summary List in-app notifications for the authenticated user
+ */
+export const ListNotificationsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "contractId": zod.string().uuid(),
+  "type": zod.string(),
+  "title": zod.string(),
+  "message": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "readAt": zod.coerce.date().nullable()
+})
+export const ListNotificationsResponse = zod.array(ListNotificationsResponseItem)
+
+
+/**
+ * @summary Mark one notification as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const MarkNotificationReadResponse = zod.object({
+  "id": zod.string().uuid(),
+  "contractId": zod.string().uuid(),
+  "type": zod.string(),
+  "title": zod.string(),
+  "message": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "readAt": zod.coerce.date().nullable()
+})
+
+
+/**
  * @summary Verify and approve an incoming Pi payment
  */
 
@@ -744,7 +932,7 @@ export const ListActivityResponse = zod.array(ListActivityResponseItem)
 
 export const ApprovePiPaymentBody = zod.object({
   "paymentId": zod.string().min(1),
-  "purpose": zod.enum(['escrow_service_deposit']).optional()
+  "purpose": zod.enum(['listing_ad', 'contract_funding']).optional()
 })
 
 export const ApprovePiPaymentResponse = zod.object({
@@ -805,7 +993,8 @@ export const CreatePiSessionResponse = zod.object({
   "authenticated": zod.literal(true),
   "accountId": zod.string(),
   "piUid": zod.string(),
-  "username": zod.string().nullable()
+  "username": zod.string().nullable(),
+  "existingAccount": zod.boolean().optional()
 })
 
 
@@ -903,7 +1092,7 @@ export const GetPiStatusResponse = zod.object({
 export const CompletePiPaymentBody = zod.object({
   "paymentId": zod.string().min(1),
   "txid": zod.string().min(1).optional(),
-  "purpose": zod.enum(['escrow_service_deposit']).optional()
+  "purpose": zod.enum(['listing_ad', 'contract_funding']).optional()
 })
 
 export const CompletePiPaymentResponse = zod.object({
@@ -911,6 +1100,22 @@ export const CompletePiPaymentResponse = zod.object({
   "idempotent": zod.boolean().optional(),
   "confirmed": zod.boolean().optional(),
   "productName": zod.string().optional()
+})
+
+
+/**
+ * @summary Verify a Pi cancellation and release its server-side payment intent
+ */
+
+
+
+export const CancelPiPaymentBody = zod.object({
+  "paymentId": zod.string().min(1),
+  "purpose": zod.enum(['listing_ad', 'contract_funding']).optional()
+})
+
+export const CancelPiPaymentResponse = zod.object({
+  "cancelled": zod.literal(true)
 })
 
 
@@ -966,6 +1171,23 @@ export const CreateListingResponse = zod.object({
 
 
 /**
+ * @summary List active and inactive listings owned by the authenticated user
+ */
+export const GetMyListingsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "pipeline": zod.enum(['digital', 'shippable', 'local_property', 'custom_terms']),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const GetMyListingsResponse = zod.array(GetMyListingsResponseItem)
+
+
+/**
  * @summary Start an escrow from an active listing, assigning its verified owner as seller
  */
 
@@ -991,12 +1213,13 @@ export const CreateListingContractResponse = zod.object({
   "sellerName": zod.string(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
+  "status": zod.enum(['draft', 'awaiting_funding', 'funded', 'submitted', 'in_delivery', 'completed', 'disputed', 'resolved', 'refunded', 'cancelled']),
   "dueDate": zod.string(),
   "paymentMethod": zod.string(),
   "nextAction": zod.string().nullable(),
   "disputeCount": zod.number().int(),
   "releaseDate": zod.string().nullable(),
+  "submittedAt": zod.string().nullable(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1063,7 +1286,8 @@ export const SubmitDeliveryResponse = zod.object({
   "contractId": zod.string(),
   "submitterId": zod.string(),
   "evidence": zod.record(zod.string(), zod.unknown()),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date()
 })
 
 
@@ -1109,10 +1333,14 @@ export const SignContractResponse = zod.object({
 
 
 /**
- * @summary Poll participant-only contract messages
+ * @summary Poll participant-only contract messages and translate for the viewer
  */
 export const ListContractMessagesParams = zod.object({
   "id": zod.coerce.string().uuid()
+})
+
+export const ListContractMessagesHeader = zod.object({
+  "targetLanguage": zod.enum(['en', 'ar', 'zh-CN', 'id', 'vi']).optional()
 })
 
 export const ListContractMessagesResponseItem = zod.object({
@@ -1121,6 +1349,7 @@ export const ListContractMessagesResponseItem = zod.object({
   "senderId": zod.string(),
   "content": zod.string(),
   "sourceText": zod.string(),
+  "sourceLanguage": zod.union([zod.literal('en'),zod.literal('ar'),zod.literal('zh-CN'),zod.literal('id'),zod.literal('vi'),zod.literal(null)]).nullable(),
   "translatedText": zod.string().nullable(),
   "targetLanguage": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -1137,14 +1366,11 @@ export const SendContractMessageParams = zod.object({
 
 export const sendContractMessageBodyContentMax = 5000;
 
-export const sendContractMessageBodyTargetLanguageMin = 2;
-export const sendContractMessageBodyTargetLanguageMax = 20;
-
 
 
 export const SendContractMessageBody = zod.object({
   "content": zod.string().min(1).max(sendContractMessageBodyContentMax),
-  "targetLanguage": zod.string().min(sendContractMessageBodyTargetLanguageMin).max(sendContractMessageBodyTargetLanguageMax).optional()
+  "targetLanguage": zod.enum(['en', 'ar', 'zh-CN', 'id', 'vi']).optional()
 })
 
 export const SendContractMessageResponse = zod.object({
@@ -1153,6 +1379,7 @@ export const SendContractMessageResponse = zod.object({
   "senderId": zod.string(),
   "content": zod.string(),
   "sourceText": zod.string(),
+  "sourceLanguage": zod.union([zod.literal('en'),zod.literal('ar'),zod.literal('zh-CN'),zod.literal('id'),zod.literal('vi'),zod.literal(null)]).nullable(),
   "translatedText": zod.string().nullable(),
   "targetLanguage": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -1160,7 +1387,7 @@ export const SendContractMessageResponse = zod.object({
 
 
 /**
- * @summary List active public chat rooms for authenticated members
+ * @summary List active public chat rooms without authentication
  */
 export const ListPublicChatRoomsResponseItem = zod.object({
   "id": zod.string().uuid(),
@@ -1169,6 +1396,18 @@ export const ListPublicChatRoomsResponseItem = zod.object({
   "active": zod.boolean()
 })
 export const ListPublicChatRoomsResponse = zod.array(ListPublicChatRoomsResponseItem)
+
+
+/**
+ * @summary List active public chat rooms without authentication (canonical alias)
+ */
+export const ListPublicChatRoomsAliasResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "languageCode": zod.enum(['en', 'ar', 'zh-CN', 'id', 'vi']),
+  "active": zod.boolean()
+})
+export const ListPublicChatRoomsAliasResponse = zod.array(ListPublicChatRoomsAliasResponseItem)
 
 
 /**

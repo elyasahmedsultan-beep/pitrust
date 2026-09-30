@@ -12,4 +12,5 @@ export interface PiAppSession {
   piUid: string;
   /** @nullable */
   username: string | null;
+  existingAccount?: boolean;
 }

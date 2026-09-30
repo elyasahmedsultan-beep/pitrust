@@ -79,11 +79,6 @@ function validationKeyBuildPlugin() {
 
 export default defineConfig({
   base: basePath,
-  define: {
-    "import.meta.env.VITE_PI_IFRAME_SESSION_ENABLED": JSON.stringify(
-      process.env.PI_IFRAME_SESSION_ENABLED === "true" ? "true" : "false",
-    ),
-  },
   plugins: [
     validationKeyServerPlugin(),
     validationKeyBuildPlugin(),
@@ -120,6 +115,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
+    sourcemap: false,
+    reportCompressedSize: false,
   },
   server: {
     port,

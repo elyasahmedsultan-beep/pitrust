@@ -1,10 +1,10 @@
 ---
-name: Scoped pnpm installs
-description: Replit package installation callback limitations in a pnpm workspace
+name: Scoped pnpm operations
+description: Keep dependency changes targeted to the correct package in a pnpm workspace
 ---
 
-When adding a dependency to a single artifact, try the package-management callback first. If it runs `pnpm add` at the workspace root and fails with `ERR_PNPM_ADDING_TO_ROOT`, use `pnpm --filter @workspace/<artifact> add <package>` instead. The callback also rejects `--filter` when passed as a package token.
+For dependency changes within one artifact, verify the target package manifest and lockfile after using the package-management callback. The callback may report a successful uninstall without changing a nested artifact manifest. If it uses the workspace root or leaves the target unchanged, use a scoped command such as `pnpm --filter @workspace/<artifact> add|remove <package>`.
 
-**Why:** Root installation would place an artifact-only dependency in the wrong package; the callback did not accept a workspace filter.
+**Why:** The callback can target the root package rather than the requested artifact; one uninstall reported success while leaving the artifact manifest untouched.
 
-**How to apply:** Use this fallback only after the callback's root-targeting failure, and keep the artifact's package manifest and workspace lockfile in sync.
+**How to apply:** Inspect the resulting diff before assuming a package change occurred. Keep the target artifact's manifest and workspace lockfile in sync.

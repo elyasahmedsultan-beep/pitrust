@@ -43,10 +43,9 @@ where c.status = 'resolved'
   );
 ```
 
-Testnet A2U requires `PI_NETWORK=testnet`, `PI_A2U_TESTNET_ENABLED=true`, and
-the dedicated `PI_TESTNET_API_KEY` and `PI_TESTNET_APP_WALLET_KEY` from a
-Testnet Pi app. Mainnet A2U remains separately gated by production mode,
-`PI_NETWORK=mainnet`, `PI_A2U_ENABLED=true`, and mainnet credentials. Never reuse
-API keys or wallet seeds across networks. Do not enable mainnet transfers until
+Pi payments and payouts are Mainnet-only. Configure `PI_ENV=mainnet` and use
+`PI_API_KEY` plus the Mainnet app wallet key. A2U payouts also require
+production mode and `PI_A2U_ENABLED=true`. The server ignores legacy
+Testnet/Sandbox settings and credentials. Do not enable mainnet transfers until
 the migration and controlled end-to-end verification are complete. Gemini is
 advisory and cannot start a payment.

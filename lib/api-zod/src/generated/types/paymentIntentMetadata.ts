@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PaymentIntentMetadataFeeType } from './paymentIntentMetadataFeeType';
+import type { PaymentIntentMetadataType } from './paymentIntentMetadataType';
 
 export type PaymentIntentMetadata = {
   contractId: string;
   feeType?: PaymentIntentMetadataFeeType;
+  type?: PaymentIntentMetadataType;
 };

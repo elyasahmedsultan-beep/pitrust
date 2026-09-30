@@ -5,13 +5,17 @@ import {
   CreateAdminSessionBody,
   CreateAdminSessionResponse,
   GetAdminAccessResponse,
+  GetListingAdFeeResponse,
   GetAdminOverviewResponse,
   ListAdminDisputesResponse,
+  UpdateAdminListingAdFeeBody,
+  UpdateAdminListingAdFeeResponse,
 } from "@workspace/api-zod";
 import { analyzeDisputeWithGemini } from "../lib/adminGemini";
 import {
   adminPasswordConfigurationReady,
   clearAdminPasswordSessionCookie,
+  configuredAdminPassword,
   createAdminSessionToken,
   hasAdminPasswordSession,
   requireAdminPasswordSession,
@@ -22,6 +26,11 @@ import {
 import { fixedPiUnits } from "../lib/pi";
 import { payoutExecutionEnabled } from "../lib/piA2uConfig";
 import { supabaseRequest } from "../lib/supabase";
+import {
+  FeeSettingsUnavailableError,
+  getListingAdFees,
+  updateListingAdFeeSettings,
+} from "../lib/appSettings";
 
 const router: IRouter = Router();
 const PAGE_SIZE = 1000;
@@ -120,6 +129,44 @@ function safeDeliveryEvidence(value: unknown): Record<string, string | string[]>
   return safe;
 }
 
+router.get("/listing-ad-fee", async (req, res): Promise<void> => {
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(GetListingAdFeeResponse.parse(await getListingAdFees()));
+  } catch (error) {
+    req.log.error({ err: error }, "Could not read listing publication fee");
+    const status =
+      typeof error === "object" && error !== null && "status" in error
+        ? Number((error as { status: number }).status)
+        : 503;
+    res.status(status).json({ error: "Listing publication fee is unavailable" });
+  }
+});
+
+router.patch(
+  "/admin/listing-ad-fee",
+  requireAdminPasswordSession,
+  requireSameOrigin,
+  async (req, res): Promise<void> => {
+    const body = UpdateAdminListingAdFeeBody.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+    try {
+      const updated = await updateListingAdFeeSettings(body.data);
+      res.json(UpdateAdminListingAdFeeResponse.parse(updated));
+    } catch (error) {
+      req.log.error({ err: error }, "Could not update listing publication fee");
+      const status =
+        typeof error === "object" && error !== null && "status" in error
+          ? Number((error as { status: number }).status)
+          : error instanceof FeeSettingsUnavailableError ? 503 : 500;
+      res.status(status).json({ error: "Listing publication fee could not be updated" });
+    }
+  },
+);
+
 router.get("/admin/access", async (req, res): Promise<void> => {
   const adminPasswordAuthenticated = hasAdminPasswordSession(req);
   res.json(GetAdminAccessResponse.parse({
@@ -128,7 +175,8 @@ router.get("/admin/access", async (req, res): Promise<void> => {
 });
 
 router.post("/admin/session", requireSameOrigin, async (req, res): Promise<void> => {
-  if (!adminPasswordConfigurationReady()) {
+  const adminPassword = configuredAdminPassword();
+  if (!adminPasswordConfigurationReady() || !adminPassword) {
     res.status(503).json({ error: "Admin password authentication is not configured" });
     return;
   }
@@ -137,7 +185,7 @@ router.post("/admin/session", requireSameOrigin, async (req, res): Promise<void>
     res.status(400).json({ error: body.error.message });
     return;
   }
-  if (!verifyAdminPassword(body.data.password, process.env.ADMIN_SECRET_PASSWORD!)) {
+  if (!verifyAdminPassword(body.data.password, adminPassword)) {
     res.status(401).json({ error: "Invalid admin password" });
     return;
   }
@@ -147,7 +195,7 @@ router.post("/admin/session", requireSameOrigin, async (req, res): Promise<void>
         authenticated: true,
         sessionToken: createAdminSessionToken(
           process.env.SESSION_SECRET!,
-          process.env.ADMIN_SECRET_PASSWORD!,
+          adminPassword,
         ),
       }));
       return;

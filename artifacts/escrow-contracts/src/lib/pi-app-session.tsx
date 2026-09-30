@@ -10,21 +10,66 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+export type AuthenticatedPiAppSession = {
+  authenticated: true;
+  accountId: string;
+  piUid: string;
+  username: string | null;
+  existingAccount?: boolean;
+};
+
 export type PiAppSessionState = {
   loading: boolean;
   signedIn: boolean;
   accountId: string | null;
   piUid: string | null;
   username: string | null;
+  accept: (session: AuthenticatedPiAppSession) => void;
   refresh: () => Promise<boolean>;
   signOut: () => Promise<void>;
 };
 
-type SessionResponse =
-  | { authenticated: true; accountId: string; piUid: string; username: string | null }
-  | { authenticated: false };
+type SessionResponse = AuthenticatedPiAppSession | { authenticated: false };
 
 const Context = createContext<PiAppSessionState | null>(null);
+let activePiAccessToken: string | null = null;
+
+export function getPiAppAccessToken(): string | null {
+  return activePiAccessToken;
+}
+
+export function clearPiAppAccessToken(): void {
+  activePiAccessToken = null;
+}
+
+export function setPiAppAccessToken(token: string | null): void {
+  activePiAccessToken = token;
+}
+
+export function isAuthenticatedPiAppSession(
+  value: unknown,
+): value is AuthenticatedPiAppSession {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return record.authenticated === true &&
+    typeof record.accountId === "string" &&
+    record.accountId.trim().length > 0 &&
+    typeof record.piUid === "string" &&
+    record.piUid.trim().length > 0 &&
+    (typeof record.username === "string" || record.username === null);
+}
+
+function parseSessionResponse(value: unknown): SessionResponse | null {
+  if (isAuthenticatedPiAppSession(value)) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<string, unknown>).authenticated === false
+  ) {
+    return { authenticated: false };
+  }
+  return null;
+}
 
 function sessionUrl() {
   return `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}api/pi/session`;
@@ -35,8 +80,10 @@ export function PiAppSessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Extract<SessionResponse, { authenticated: true }> | null>(null);
   const observedAccountId = useRef<string | null | undefined>(undefined);
+  const sessionRevision = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestRevision = sessionRevision.current;
     setLoading(true);
     try {
       const response = await fetch(sessionUrl(), {
@@ -45,7 +92,9 @@ export function PiAppSessionProvider({ children }: { children: ReactNode }) {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) throw new Error("Pi app session lookup failed");
-      const payload = await response.json() as SessionResponse;
+      const payload = parseSessionResponse(await response.json());
+      if (!payload) throw new Error("Pi app session response was invalid");
+      if (requestRevision !== sessionRevision.current) return false;
       const nextSession = payload.authenticated ? payload : null;
       const nextAccountId = nextSession?.accountId ?? null;
       if (
@@ -64,7 +113,18 @@ export function PiAppSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [queryClient]);
 
+  const accept = useCallback((nextSession: AuthenticatedPiAppSession) => {
+    sessionRevision.current += 1;
+    if (observedAccountId.current !== nextSession.accountId) {
+      queryClient.clear();
+    }
+    observedAccountId.current = nextSession.accountId;
+    setSession(nextSession);
+    setLoading(false);
+  }, [queryClient]);
+
   const signOut = useCallback(async () => {
+    sessionRevision.current += 1;
     try {
       await fetch(sessionUrl(), {
         method: "DELETE",
@@ -73,6 +133,7 @@ export function PiAppSessionProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       observedAccountId.current = null;
+      clearPiAppAccessToken();
       setSession(null);
       queryClient.clear();
     }
@@ -88,9 +149,10 @@ export function PiAppSessionProvider({ children }: { children: ReactNode }) {
     accountId: session?.accountId ?? null,
     piUid: session?.piUid ?? null,
     username: session?.username ?? null,
+    accept,
     refresh,
     signOut,
-  }), [loading, refresh, session, signOut]);
+  }), [accept, loading, refresh, session, signOut]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

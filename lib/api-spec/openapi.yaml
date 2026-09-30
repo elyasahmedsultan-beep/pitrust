@@ -130,6 +130,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /contracts/{id}/cancel:
+    post:
+      operationId: cancelUnfundedContract
+      tags: [contracts]
+      summary: Cancel an unfunded contract before any funding payment is active
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Unfunded contract cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractCancellation" }
+        "409":
+          description: Funding is active or the contract is no longer cancellable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /contracts/{id}/refund-wallet:
+    post:
+      operationId: refundTestnetContractToWallet
+      tags: [contracts]
+      summary: Refund a funded Testnet contract to the buyer's internal wallet
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+      responses:
+        "200":
+          description: Testnet refund completed and recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestnetEscrowRefund" }
+        "409":
+          description: Contract is not eligible for a wallet refund
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /contracts/{id}/fund:
     post:
       operationId: fundContract
@@ -271,6 +307,42 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AdminAccess" }
+  /admin/listing-ad-fee:
+    patch:
+      operationId: updateAdminListingAdFee
+      tags: [admin]
+      summary: Update the listing publication fee using an admin password session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingAdFeeUpdate" }
+      responses:
+        "200":
+          description: Updated listing publication fee
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingAdFee" }
+        "400":
+          description: Fee is outside the supported Pi range or precision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Password-authenticated admin session required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Request did not originate from this site
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Listing publication fee settings are unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /admin/session:
     post:
       operationId: createAdminSession
@@ -577,40 +649,85 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MonthlyBadgeStatus" }
-  /pi/escrow-service-deposits/intent:
-    post:
-      operationId: createEscrowServiceDepositIntent
+  /listing-ad-fee:
+    get:
+      operationId: getListingAdFee
       tags: [payments]
-      summary: Get the fixed Pi payment parameters for the escrow service deposit
+      summary: Read the current system-controlled listing publication fee
       responses:
         "200":
-          description: Product details and exact U2A payment metadata
+          description: Current fee used for new listing payment intents
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EscrowServiceDepositIntent" }
-        "409":
-          description: Mainnet Pi account linking is required
+              schema: { $ref: "#/components/schemas/ListingAdFee" }
+        "503":
+          description: Listing publication fee settings are unavailable
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /pi/listings/{id}/publication-payment-intent:
+    post:
+      operationId: createListingAdPaymentIntent
+      tags: [payments]
+      summary: Create or resume a Pi payment to publish an owned listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Server-issued listing publication payment intent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingAdPaymentIntent" }
+        "409":
+          description: Listing is already published or another payment is in progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /pi/listings/{id}/edit-payment-intent:
+    post:
+      operationId: createListingEditPaymentIntent
+      tags: [payments]
+      summary: Create a Pi payment intent for an owned listing edit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingEditInput" }
+      responses:
+        "200":
+          description: Payment intent binds the exact edit payload until confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingAdPaymentIntent" }
+  /pi/listings/{id}/delete-payment-intent:
+    post:
+      operationId: createListingDeletePaymentIntent
+      tags: [payments]
+      summary: Create a Pi payment intent to deactivate an owned listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Payment intent for a soft deletion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingAdPaymentIntent" }
         "503":
           description: Pi payment configuration is unavailable
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-  /pi/escrow-service-deposits:
-    get:
-      operationId: listEscrowServiceDeposits
-      tags: [payments]
-      summary: List the current user's confirmed and pending escrow service deposits
-      responses:
-        "200":
-          description: The current user's recent U2A service deposits
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/EscrowServiceDeposit" }
   /contracts/{id}/payment:
     post:
       operationId: createContractPaymentIntent
@@ -686,6 +803,40 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Activity"
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [activity]
+      summary: List in-app notifications for the authenticated user
+      responses:
+        "200":
+          description: Recent user notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notification" }
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [activity]
+      summary: Mark one notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Notification marked as read
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Notification" }
+        "404":
+          description: Notification not found for the authenticated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /pi/payments/approve:
     post:
       operationId: approvePiPayment
@@ -882,6 +1033,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PiFundingResult"
+  /pi/payments/cancel:
+    post:
+      operationId: cancelPiPayment
+      tags: [payments]
+      summary: Verify a Pi cancellation and release its server-side payment intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PiPaymentAction" }
+      responses:
+        "200":
+          description: Payment intent released after cancellation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PiPaymentCancellation" }
   /listings:
     get:
       operationId: searchListings
@@ -917,6 +1084,19 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Listing" }
+  /listings/mine:
+    get:
+      operationId: getMyListings
+      tags: [marketplace]
+      summary: List active and inactive listings owned by the authenticated user
+      responses:
+        "200":
+          description: The caller's listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OwnedListing" }
   /listings/{id}/contracts:
     post:
       operationId: createListingContract
@@ -1015,9 +1195,13 @@ paths:
     get:
       operationId: listContractMessages
       tags: [marketplace]
-      summary: Poll participant-only contract messages
+      summary: Poll participant-only contract messages and translate for the viewer
       parameters:
         - $ref: "#/components/parameters/ContractId"
+        - name: targetLanguage
+          in: header
+          required: false
+          schema: { $ref: "#/components/schemas/ChatLanguage" }
       responses:
         "200":
           description: Most recent messages; clients may safely poll
@@ -1047,7 +1231,7 @@ paths:
     get:
       operationId: listPublicChatRooms
       tags: [chat]
-      summary: List active public chat rooms for authenticated members
+      summary: List active public chat rooms without authentication
       responses:
         "200":
           description: Active language rooms
@@ -1056,8 +1240,29 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/PublicChatRoom" }
-        "401":
-          description: Authentication required
+        "503":
+          description: Chat room storage is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /rooms:
+    get:
+      operationId: listPublicChatRoomsAlias
+      tags: [chat]
+      summary: List active public chat rooms without authentication (canonical alias)
+      responses:
+        "200":
+          description: Active language rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicChatRoom" }
+        "503":
+          description: Chat room storage is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /chat/messages:
     get:
       operationId: listPublicChatMessages
@@ -1313,7 +1518,7 @@ components:
     piAppSessionCookie:
       type: apiKey
       in: cookie
-      name: pitrust_pi_session
+      name: pi_app_session
   parameters:
     ContractId:
       name: id
@@ -1336,6 +1541,21 @@ components:
         error:
           type: string
       required: [error]
+    ContractCancellation:
+      type: object
+      properties:
+        cancelled: { type: boolean, const: true }
+        contractId: { type: string, format: uuid }
+        status: { type: string, const: cancelled }
+      required: [cancelled, contractId, status]
+    TestnetEscrowRefund:
+      type: object
+      properties:
+        refunded: { type: boolean, const: true }
+        idempotent: { type: boolean }
+        balance: { type: number }
+        transactionId: { type: string, format: uuid }
+      required: [refunded, idempotent, balance, transactionId]
     Contract:
       type: object
       properties:
@@ -1366,7 +1586,7 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, awaiting_funding, funded, in_delivery, completed, disputed, resolved, refunded, cancelled]
+          enum: [draft, awaiting_funding, funded, submitted, in_delivery, completed, disputed, resolved, refunded, cancelled]
         dueDate:
           type: string
         paymentMethod:
@@ -1376,6 +1596,8 @@ components:
         disputeCount:
           type: integer
         releaseDate:
+          type: ["string", "null"]
+        submittedAt:
           type: ["string", "null"]
         createdAt:
           type: string
@@ -1399,6 +1621,7 @@ components:
         - nextAction
         - disputeCount
         - releaseDate
+        - submittedAt
         - createdAt
         - updatedAt
     ContractInput:
@@ -1500,6 +1723,17 @@ components:
         createdAt:
           type: string
       required: [id, contractId, type, title, description, actor, tone, createdAt]
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        contractId: { type: string, format: uuid }
+        type: { type: string }
+        title: { type: string }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: ["string", "null"], format: date-time }
+      required: [id, contractId, type, title, message, createdAt, readAt]
     DashboardSummary:
       type: object
       properties:
@@ -1527,7 +1761,7 @@ components:
       type: object
       properties:
         paymentId: { type: string, minLength: 1 }
-        purpose: { type: string, enum: [escrow_service_deposit] }
+        purpose: { type: string, enum: [listing_ad, contract_funding] }
       required: [paymentId]
     PiAccountLinkInput:
       type: object
@@ -1557,6 +1791,7 @@ components:
         accountId: { type: string }
         piUid: { type: string }
         username: { type: ["string", "null"] }
+        existingAccount: { type: boolean }
       required: [authenticated, accountId, piUid, username]
     PiAppSessionState:
       type: object
@@ -1599,8 +1834,13 @@ components:
       properties:
         paymentId: { type: string, minLength: 1 }
         txid: { type: string, minLength: 1 }
-        purpose: { type: string, enum: [escrow_service_deposit] }
+        purpose: { type: string, enum: [listing_ad, contract_funding] }
       required: [paymentId]
+    PiPaymentCancellation:
+      type: object
+      properties:
+        cancelled: { type: boolean, const: true }
+      required: [cancelled]
     PiApproval:
       type: object
       properties:
@@ -1615,35 +1855,6 @@ components:
         confirmed: { type: boolean }
         productName: { type: string }
       required: [funded]
-    EscrowServiceDepositMetadata:
-      type: object
-      additionalProperties: false
-      properties:
-        type: { type: string, const: escrow }
-      required: [type]
-    EscrowServiceDepositIntent:
-      type: object
-      properties:
-        productName: { type: string, const: "Escrow Service Deposit" }
-        description: { type: string, const: "Secure funds held in escrow for freelance service" }
-        amount: { type: number, const: 1 }
-        memo: { type: string, const: "Escrow deposit for job agreement" }
-        metadata: { $ref: "#/components/schemas/EscrowServiceDepositMetadata" }
-      required: [productName, description, amount, memo, metadata]
-    EscrowServiceDeposit:
-      type: object
-      properties:
-        paymentId: { type: string }
-        productName: { type: string, const: "Escrow Service Deposit" }
-        description: { type: string, const: "Secure funds held in escrow for freelance service" }
-        amount: { type: number, const: 1 }
-        memo: { type: string, const: "Escrow deposit for job agreement" }
-        metadata: { $ref: "#/components/schemas/EscrowServiceDepositMetadata" }
-        network: { type: string, const: "Pi Network" }
-        status: { type: string, enum: [pending, approved, confirmed] }
-        txid: { type: ["string", "null"] }
-        createdAt: { type: string, format: date-time }
-      required: [paymentId, productName, description, amount, memo, metadata, network, status, txid, createdAt]
     PayoutPending:
       type: object
       properties:
@@ -1802,6 +2013,7 @@ components:
           properties:
             contractId: { type: string }
             feeType: { type: string, enum: [dispute] }
+            type: { type: string, enum: [contract_funding] }
           required: [contractId]
       required: [contractId, amount, memo, metadata]
     Listing:
@@ -1816,6 +2028,26 @@ components:
         metadata: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
       required: [id, title, description, amount, currency, pipeline, metadata, createdAt]
+    OwnedListing:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        pipeline: { type: string, enum: [digital, shippable, local_property, custom_terms] }
+        metadata: { type: object, additionalProperties: true }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+      required: [id, title, description, amount, currency, pipeline, metadata, active, createdAt]
+    ListingEditInput:
+      type: object
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 240 }
+        description: { type: string, maxLength: 10000 }
+        amount: { type: number, exclusiveMinimum: 0, maximum: 1000000000, description: Pi amount with up to 8 decimal places; precision is validated by the API. }
     ListingInput:
       type: object
       properties:
@@ -1826,6 +2058,62 @@ components:
         pipeline: { type: string, enum: [digital, shippable, local_property, custom_terms] }
         metadata: { type: object, additionalProperties: true }
       required: [title, description, amount, currency, pipeline, metadata]
+    ListingAdFee:
+      type: object
+      properties:
+        listingAdFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+        listingEditFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+        listingDeleteFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+      required: [listingAdFeePi, listingEditFeePi, listingDeleteFeePi]
+    ListingAdFeeUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        listingAdFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+        listingEditFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+        listingDeleteFeePi:
+          type: number
+          minimum: 0.00000001
+          maximum: 1000000
+          description: Pi amount with up to 8 decimal places; precision is validated by the API.
+    ListingAdPaymentMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        type: { type: string, const: listing_ad }
+        listingId: { type: string, format: uuid }
+        intentId: { type: string, format: uuid }
+        operation: { type: string, enum: [publication, edit, delete] }
+      required: [type, listingId, intentId]
+    ListingAdPaymentIntent:
+      type: object
+      properties:
+        listingId: { type: string, format: uuid }
+        intentId: { type: string, format: uuid }
+        amount: { type: number, minimum: 0.00000001, maximum: 1000000, description: Pi amount with up to 8 decimal places; precision is validated by the API. }
+        memo: { type: string, enum: ["Listing publication fee", "Listing edit fee", "Listing deletion fee"] }
+        metadata: { $ref: "#/components/schemas/ListingAdPaymentMetadata" }
+      required: [listingId, intentId, amount, memo, metadata]
     ListingContractInput:
       type: object
       properties:
@@ -1937,7 +2225,8 @@ components:
         submitterId: { type: string }
         evidence: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
-      required: [id, contractId, submitterId, evidence, createdAt]
+        submittedAt: { type: string, format: date-time }
+      required: [id, contractId, submitterId, evidence, createdAt, submittedAt]
     SignatureInput:
       type: object
       properties:
@@ -1957,7 +2246,7 @@ components:
       type: object
       properties:
         content: { type: string, minLength: 1, maxLength: 5000 }
-        targetLanguage: { type: string, minLength: 2, maxLength: 20 }
+        targetLanguage: { $ref: "#/components/schemas/ChatLanguage" }
       required: [content]
     ChatMessage:
       type: object
@@ -1967,10 +2256,11 @@ components:
         senderId: { type: string }
         content: { type: string }
         sourceText: { type: string }
+        sourceLanguage: { type: ["string", "null"], enum: [en, ar, zh-CN, id, vi, null] }
         translatedText: { type: ["string", "null"] }
         targetLanguage: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
-      required: [id, contractId, senderId, content, sourceText, translatedText, targetLanguage, createdAt]
+      required: [id, contractId, senderId, content, sourceText, sourceLanguage, translatedText, targetLanguage, createdAt]
     ChatLanguage:
       type: string
       enum: [en, ar, zh-CN, id, vi]

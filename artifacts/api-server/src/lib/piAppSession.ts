@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
-export const PI_APP_SESSION_COOKIE = "pitrust_pi_session";
+export const PI_APP_SESSION_COOKIE = "pi_app_session";
+export const LEGACY_PI_APP_SESSION_COOKIE = "pitrust_pi_session";
 export const PI_APP_SESSION_TTL_SECONDS = 24 * 60 * 60;
 
 export function createPiAppSessionCredential(): { token: string; tokenHash: string } {
@@ -20,11 +21,19 @@ export function parsePiAppSessionCookie(cookieHeader: string | undefined): strin
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(";")) {
     const [name, ...valueParts] = part.trim().split("=");
-    if (name !== PI_APP_SESSION_COOKIE) continue;
+    if (name !== PI_APP_SESSION_COOKIE && name !== LEGACY_PI_APP_SESSION_COOKIE) continue;
     const value = valueParts.join("=");
     return isPiAppSessionToken(value) ? value : null;
   }
   return null;
+}
+
+export function hasPiAppSessionCookie(cookieHeader: string | undefined): boolean {
+  if (!cookieHeader) return false;
+  return cookieHeader.split(";").some((part) => {
+    const name = part.trim().split("=", 1)[0];
+    return name === PI_APP_SESSION_COOKIE || name === LEGACY_PI_APP_SESSION_COOKIE;
+  });
 }
 
 export type PiAppSessionLookup = {
@@ -46,15 +55,26 @@ export async function resolvePiAppSession(
   return userId ? { userId, piUid: session.pi_uid, username: session.pi_username } : null;
 }
 
-export function piAppSessionCookieOptions(isSecure: boolean, maxAgeSeconds = PI_APP_SESSION_TTL_SECONDS): string {
+function cookieOptions(
+  cookieName: string,
+  isSecure: boolean,
+  maxAgeSeconds: number,
+): string {
   return [
-    `${PI_APP_SESSION_COOKIE}=`,
+    `${cookieName}=`,
     "HttpOnly",
-    "SameSite=Lax",
-    "Path=/api",
+    ...(isSecure ? ["SameSite=None"] : ["SameSite=Lax"]),
+    "Path=/",
     `Max-Age=${maxAgeSeconds}`,
     ...(isSecure ? ["Secure"] : []),
   ].join("; ");
+}
+
+export function piAppSessionCookieOptions(
+  isSecure: boolean,
+  maxAgeSeconds = PI_APP_SESSION_TTL_SECONDS,
+): string {
+  return cookieOptions(PI_APP_SESSION_COOKIE, isSecure, maxAgeSeconds);
 }
 
 export function piAppSessionSetCookie(
@@ -66,4 +86,11 @@ export function piAppSessionSetCookie(
     `${PI_APP_SESSION_COOKIE}=`,
     `${PI_APP_SESSION_COOKIE}=${token}`,
   );
+}
+
+export function piAppSessionClearCookies(isSecure: boolean): string[] {
+  return [
+    cookieOptions(PI_APP_SESSION_COOKIE, isSecure, 0),
+    cookieOptions(LEGACY_PI_APP_SESSION_COOKIE, isSecure, 0),
+  ];
 }

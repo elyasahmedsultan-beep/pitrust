@@ -49,7 +49,7 @@ function transactionTime(value: string): string {
 export default function WalletPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
-  const wallet = useGetTestnetWallet({ query: { queryKey: getGetTestnetWalletQueryKey(), enabled: PI_SANDBOX, refetchInterval: 30000 } });
+  const wallet = useGetTestnetWallet({ query: { queryKey: getGetTestnetWalletQueryKey(), enabled: PI_SANDBOX, refetchInterval: (query) => query.state.status === 'error' ? false : 30000 } });
   const faucet = useClaimTestnetFaucet();
   const transfer = useTransferTestnetWallet();
   const [cooldownSeconds, setCooldownSeconds] = useState(0);

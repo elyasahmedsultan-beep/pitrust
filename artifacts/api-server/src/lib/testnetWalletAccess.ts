@@ -1,28 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
-import { isPiIframeSessionAllowed, type PiIframeSessionEnvironment } from "./piIframeSession.ts";
-
-type TestnetWalletEnvironment = PiIframeSessionEnvironment & {
-  NODE_ENV?: string;
-};
-
-function normalizeHostname(hostname: string): string {
-  return hostname.trim().toLowerCase().replace(/\.$/, "");
-}
 
 export function isTestnetWalletHostAllowed(
-  hostname: string,
-  environment: TestnetWalletEnvironment = process.env,
+  _hostname: string,
+  _environment: Record<string, string | undefined> = process.env,
 ): boolean {
-  if (environment.PI_NETWORK?.trim().toLowerCase() !== "testnet") return false;
-  if (isPiIframeSessionAllowed(hostname, environment)) return true;
-
-  const host = normalizeHostname(hostname);
-  const isLocalDevelopmentHost =
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host.endsWith(".replit.dev");
-  return environment.NODE_ENV !== "production" && isLocalDevelopmentHost;
+  return false;
 }
 
 export function requireTestnetWalletAccess(

@@ -31,6 +31,8 @@ export interface Contract {
   disputeCount: number;
   /** @nullable */
   releaseDate: string | null;
+  /** @nullable */
+  submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,12 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import en from './en.json';
-import ar from './ar.json';
-import zhCN from './zh-CN.json';
-import id from './id.json';
-import vi from './vi.json';
 
-export const catalogs = { en, ar, 'zh-CN': zhCN, id, vi } as const;
-export type Language = keyof typeof catalogs;
+export type Language = 'en' | 'ar' | 'zh-CN' | 'id' | 'vi';
 export type TranslationCatalog = typeof en;
 
 type LeafPaths<T> = T extends string
@@ -31,7 +26,7 @@ const LEGACY_STORAGE_KEY = 'pactline-language';
 const rtlLanguages: ReadonlySet<Language> = new Set(['ar']);
 
 function isLanguage(value: string | null): value is Language {
-  return value !== null && Object.prototype.hasOwnProperty.call(catalogs, value);
+  return value !== null && languageOptions.some(({ code }) => code === value);
 }
 
 function getInitialLanguage(): Language {
@@ -57,13 +52,28 @@ function getInitialLanguage(): Language {
   return 'en';
 }
 
-function readTranslation(language: Language, key: TranslationKey): string {
+function loadCatalog(language: Language): Promise<TranslationCatalog> {
+  switch (language) {
+    case 'en':
+      return Promise.resolve(en);
+    case 'ar':
+      return import('./ar.json').then(({ default: catalog }) => catalog as TranslationCatalog);
+    case 'zh-CN':
+      return import('./zh-CN.json').then(({ default: catalog }) => catalog as TranslationCatalog);
+    case 'id':
+      return import('./id.json').then(({ default: catalog }) => catalog as TranslationCatalog);
+    case 'vi':
+      return import('./vi.json').then(({ default: catalog }) => catalog as TranslationCatalog);
+  }
+}
+
+function readTranslation(catalog: TranslationCatalog, key: TranslationKey): string {
   const result = key.split('.').reduce<unknown>((value, part) => {
     if (value !== null && typeof value === 'object' && part in value) {
       return (value as Record<string, unknown>)[part];
     }
     return undefined;
-  }, catalogs[language]);
+  }, catalog);
   return typeof result === 'string' ? result : key;
 }
 
@@ -83,7 +93,40 @@ export type I18nProviderProps = {
 
 export function I18nProvider({ children, initialLanguage }: I18nProviderProps) {
   const [language, setLanguage] = useState<Language>(initialLanguage ?? getInitialLanguage);
+  const [catalog, setCatalog] = useState<TranslationCatalog>(en);
+  const [catalogLanguage, setCatalogLanguage] = useState<Language>('en');
+  const catalogRequestRef = useRef(0);
   const direction = rtlLanguages.has(language) ? 'rtl' : 'ltr';
+
+  const changeLanguage = useCallback((nextLanguage: Language) => {
+    const request = ++catalogRequestRef.current;
+    if (nextLanguage === 'en') {
+      setCatalog(en);
+      setCatalogLanguage('en');
+      setLanguage('en');
+      return;
+    }
+    void loadCatalog(nextLanguage).then((nextCatalog) => {
+      if (catalogRequestRef.current !== request) return;
+      setCatalog(nextCatalog);
+      setCatalogLanguage(nextLanguage);
+      setLanguage(nextLanguage);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (catalogLanguage === language) return;
+    const request = ++catalogRequestRef.current;
+    let active = true;
+    void loadCatalog(language).then((nextCatalog) => {
+      if (!active || catalogRequestRef.current !== request) return;
+      setCatalog(nextCatalog);
+      setCatalogLanguage(language);
+    });
+    return () => {
+      active = false;
+    };
+  }, [catalogLanguage, language]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -98,15 +141,15 @@ export function I18nProvider({ children, initialLanguage }: I18nProviderProps) {
   const value = useMemo<I18nContextValue>(() => ({
     language,
     direction,
-    setLanguage,
+    setLanguage: changeLanguage,
     t: (key, values) => {
-      const message = readTranslation(language, key);
+      const message = readTranslation(catalog, key);
       if (!values) return message;
       return message.replace(/\{([^{}]+)\}/g, (placeholder, name: string) => (
         Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : placeholder
       ));
     },
-  }), [language, direction]);
+  }), [language, direction, changeLanguage, catalog]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

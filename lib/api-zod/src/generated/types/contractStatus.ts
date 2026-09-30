@@ -13,6 +13,7 @@ export const ContractStatus = {
   draft: 'draft',
   awaiting_funding: 'awaiting_funding',
   funded: 'funded',
+  submitted: 'submitted',
   in_delivery: 'in_delivery',
   completed: 'completed',
   disputed: 'disputed',

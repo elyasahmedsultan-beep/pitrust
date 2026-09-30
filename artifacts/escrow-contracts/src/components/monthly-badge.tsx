@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n';
 
 export default function MonthlyBadge(){
  const {t}=useI18n();const qc=useQueryClient();
- const badge=useGetMonthlyBadgeStatus({query:{queryKey:getGetMonthlyBadgeStatusQueryKey(),refetchInterval:10000}});
+ const badge=useGetMonthlyBadgeStatus({query:{queryKey:getGetMonthlyBadgeStatusQueryKey(),refetchInterval:(query)=>query.state.status==='error'?false:10000}});
  const intent=useCreateMonthlyBadgePaymentIntent();
  const pi=usePiPayment(()=>{void qc.invalidateQueries({queryKey:getGetMonthlyBadgeStatusQueryKey()})});
  const [error,setError]=useState('');
@@ -21,7 +21,7 @@ export default function MonthlyBadge(){
      if(issued.amount!==2||!issued.intentId||issued.metadata.badgeAuditId!==issued.intentId||issued.metadata.billingMonth!==badge.data?.billingMonth)throw new Error('Invalid monthly badge intent');
      void qc.invalidateQueries({queryKey:getGetMonthlyBadgeStatusQueryKey()});
      await pi.pay(issued);
-   }catch{setError(t('escrow.piPaymentFailed'));void qc.invalidateQueries({queryKey:getGetMonthlyBadgeStatusQueryKey()})}
+   }catch(error){setError(error instanceof Error?error.message:t('escrow.piPaymentFailed'));void qc.invalidateQueries({queryKey:getGetMonthlyBadgeStatusQueryKey()})}
  };
  return <section className="rounded-xl border border-[#324037] bg-[#1A1A1A] p-6" data-testid="section-monthly-badge">
    <div className="flex items-start justify-between gap-4"><div className={`grid h-11 w-11 place-items-center rounded-xl ${verified?'bg-[#21482d] text-[#1DE9B6]':'bg-[#263027] text-[#779789]'}`}><Award size={23}/></div>{badge.data&&<span className="rounded-full border border-[#31503c] px-3 py-1 font-mono text-[10px] text-[#a4c4ac]">{badge.data.billingMonth.slice(0,7)}</span>}</div>

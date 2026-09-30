@@ -14,3 +14,9 @@ A Replit preview may load `window.Pi` and finish `Pi.init` while the Pi SDK stil
 **Why:** The preview browser can execute the downloaded SDK without providing the Pi Browser authentication context.
 
 **How to apply:** When `Pi.authenticate` times out before any backend request, inspect the actual browser family and exact Developer Portal URL mapping before investigating Clerk, cookies, or API routes.
+
+Register `onIncompletePaymentFound` as the second argument to `Pi.authenticate`. The SDK invokes it when a later `Pi.createPayment` encounters an older incomplete payment; it is not a `createPayment` callback.
+
+**Why:** Putting recovery in the create-payment callback object is unsupported and leaves the SDK's incomplete-payment conflict unresolved.
+
+**How to apply:** Reconcile the payment from the authenticate callback, and make the payment flow wait for that recovery before retrying or enabling another payment.

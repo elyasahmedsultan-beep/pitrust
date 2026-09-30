@@ -6,14 +6,23 @@ const connectors = new ReplitConnectors();
 export class SupabaseRequestError extends Error {
   status: number;
   details: unknown;
+  provider = "supabase";
+  code: string;
 
-  constructor(status: number, details: unknown) {
+  constructor(status: number, details: unknown, code?: string) {
     super("Supabase request failed");
     this.name = "SupabaseRequestError";
     this.status = status;
     this.details = details;
+    const responseCode = details && typeof details === "object" && "code" in details &&
+      typeof details.code === "string"
+      ? details.code
+      : undefined;
+    this.code = code ?? responseCode ?? "SUPABASE_REQUEST_FAILED";
   }
 }
+
+const SUPABASE_REQUEST_TIMEOUT_MS = 10_000;
 
 export async function supabaseRequest<T>(
   resource: string,
@@ -29,31 +38,65 @@ export async function supabaseRequest<T>(
     headerRecord[key] = value;
   });
 
-  const response = await connectors.proxy(
-    "supabase",
-    `/rest/v1/${resource}`,
-    {
-      ...init,
-      headers: headerRecord,
-    },
-  );
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const request = async (): Promise<T> => {
+    let response: Response;
+    try {
+      response = await connectors.proxy(
+        "supabase",
+        `/rest/v1/${resource}`,
+        {
+          ...init,
+          headers: headerRecord,
+        },
+      );
+    } catch (error) {
+      const timedOut = error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError");
+      throw new SupabaseRequestError(
+        timedOut ? 504 : 502,
+        {
+          message: timedOut
+            ? `Supabase request timed out after ${SUPABASE_REQUEST_TIMEOUT_MS / 1_000} seconds`
+            : "Could not connect to Supabase",
+        },
+        timedOut ? "SUPABASE_TIMEOUT" : "SUPABASE_UNAVAILABLE",
+      );
+    }
 
-  if (!response.ok) {
-    const details = await response.json().catch(() => ({
-      message: response.statusText,
-    }));
-    throw new SupabaseRequestError(response.status, details);
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({
+        message: response.statusText,
+      }));
+      throw new SupabaseRequestError(response.status, details);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const expectsMinimalResponse = headers
+      .get("Prefer")
+      ?.split(",")
+      .some((preference) => preference.trim().toLowerCase() === "return=minimal") ?? false;
+    return parseSupabaseResponse<T>(response, expectsMinimalResponse);
+  };
+
+  const deadline = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new SupabaseRequestError(
+        504,
+        { message: `Supabase request timed out after ${SUPABASE_REQUEST_TIMEOUT_MS / 1_000} seconds` },
+        "SUPABASE_TIMEOUT",
+      ));
+    }, SUPABASE_REQUEST_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([request(), deadline]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const expectsMinimalResponse = headers
-    .get("Prefer")
-    ?.split(",")
-    .some((preference) => preference.trim().toLowerCase() === "return=minimal") ?? false;
-  return parseSupabaseResponse<T>(response, expectsMinimalResponse);
 }
 
 export function isMissingSupabaseTable(error: unknown): boolean {

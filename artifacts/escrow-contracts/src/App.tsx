@@ -1,12 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import {
-  AuthenticateWithRedirectCallback,
-  ClerkProvider,
-  useClerk,
-  useUser,
-} from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   ArrowRight,
   LockKeyhole,
@@ -14,73 +7,79 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
-import { AppShell } from '@/components/app-shell';
+import { PiAppShell } from '@/components/app-shell';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PiSignInButton } from '@/components/pi-sign-in-button';
 import { PiIframeSessionProvider } from '@/lib/pi-iframe-session';
 import { usePiIframeSession } from '@/lib/pi-iframe-session';
 import { PiAppSessionProvider, usePiAppSession } from '@/lib/pi-app-session';
-import { PI_SANDBOX } from '@/lib/pi-sdk';
+import { isPiBrowserRuntime, PI_SANDBOX } from '@/lib/pi-sdk';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import ActivityPage from '@/pages/activity';
-import AdminDashboard from '@/pages/AdminDashboard';
-import ContractDetail from '@/pages/contract-detail';
-import Dashboard from '@/pages/dashboard';
-import Disputes from '@/pages/disputes';
-import NewContract from '@/pages/new-contract';
-import NotFound from '@/pages/not-found';
-import Marketplace from '@/pages/marketplace';
-import Rates from '@/pages/rates';
-import ProfilePage from '@/pages/profile';
-import ContractChat from '@/pages/contract-chat';
-import ChatRoomsPage from '@/pages/chat';
-import PublicChatRoomPage from '@/pages/public-chat-room';
-import PrivacyPolicyPage from '@/pages/privacy-policy';
-import TermsOfServicePage from '@/pages/terms-of-service';
-import WalletPage from '@/pages/wallet';
 import { I18nProvider, useI18n } from '@/i18n';
 
-const queryClient = new QueryClient();
-
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+const ActivityPage = lazy(() => import('@/pages/activity'));
+const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
+const ContractDetail = lazy(() => import('@/pages/contract-detail'));
+const Dashboard = lazy(() => import('@/pages/dashboard'));
+const Disputes = lazy(() => import('@/pages/disputes'));
+const NewContract = lazy(() => import('@/pages/new-contract'));
+const NotFound = lazy(() => import('@/pages/not-found'));
+const Marketplace = lazy(() => import('@/pages/marketplace'));
+const MyListings = lazy(() => import('@/pages/my-listings'));
+const Rates = lazy(() => import('@/pages/rates'));
+const ProfilePage = lazy(() => import('@/pages/profile'));
+const ContractChat = lazy(() => import('@/pages/contract-chat'));
+const ChatRoomsPage = lazy(() => import('@/pages/chat'));
+const PublicChatRoomPage = lazy(() => import('@/pages/public-chat-room'));
+const PrivacyPolicyPage = lazy(() => import('@/pages/privacy-policy'));
+const TermsOfServicePage = lazy(() => import('@/pages/terms-of-service'));
+const WalletPage = lazy(() => import('@/pages/wallet'));
+const ClerkProviderWithRoutes = lazy(() =>
+  import('@/components/clerk-provider-with-routes').then((module) => ({
+    default: module.ClerkProviderWithRoutes,
+  })),
+);
+const ClerkHomeRedirect = lazy(() =>
+  import('@/components/clerk-route-components').then((module) => ({
+    default: module.ClerkHomeRedirect,
+  })),
+);
+const ClerkProtectedContent = lazy(() =>
+  import('@/components/clerk-route-components').then((module) => ({
+    default: module.ClerkProtectedContent,
+  })),
+);
+const ClerkContractDetailRoute = lazy(() =>
+  import('@/components/clerk-route-components').then((module) => ({
+    default: module.ClerkContractDetailRoute,
+  })),
+);
+const ClerkSsoCallback = lazy(() =>
+  import('@/components/clerk-route-components').then((module) => ({
+    default: module.ClerkSsoCallback,
+  })),
 );
 
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      retryOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchIntervalInBackground: false,
+    },
+  },
+});
+
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const AuthModeContext = createContext<() => void>(() => {});
 
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath)
     ? path.slice(basePath.length) || '/'
     : path;
-}
-
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-}
-
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const currentQueryClient = useQueryClient();
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (
-        prevUserIdRef.current !== undefined &&
-        prevUserIdRef.current !== userId
-      ) {
-        currentQueryClient.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, currentQueryClient]);
-
-  return null;
 }
 
 function PiAuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
@@ -197,106 +196,146 @@ function LandingPage() {
   );
 }
 
-function HomeRedirect() {
-  const { isLoaded, isSignedIn } = useUser();
+function PiHomeRedirect() {
   const { session } = usePiIframeSession();
   const { loading: piLoading, signedIn: piSignedIn } = usePiAppSession();
-  if (!session && !piSignedIn && (!isLoaded || piLoading)) return null;
-  if (!session && !isSignedIn && !piSignedIn) return <LandingPage />;
-  return <AppShell><Dashboard /></AppShell>;
+  if (!session && !piSignedIn && piLoading) return null;
+  if (!session && !piSignedIn) return <LandingPage />;
+  return <PiAppShell><Dashboard /></PiAppShell>;
 }
 
-function ProtectedContent({ children }: {
+function PiProtectedContent({ children }: { children: ReactNode }) {
+  const { session } = usePiIframeSession();
+  const { loading: piLoading, signedIn: piSignedIn } = usePiAppSession();
+  if (!session && !piSignedIn && piLoading) return null;
+  if (!session && !piSignedIn) return <Redirect to="/" />;
+  return <PiAppShell>{children}</PiAppShell>;
+}
+
+function ProtectedPage({ children, clerkEnabled }: {
   children: ReactNode;
+  clerkEnabled: boolean;
 }) {
-  const { isLoaded, isSignedIn } = useUser();
-  const { session } = usePiIframeSession();
-  const { loading: piLoading, signedIn: piSignedIn } = usePiAppSession();
-  if (!session && !piSignedIn && (!isLoaded || piLoading)) return null;
-  if (!session && !isSignedIn && !piSignedIn) return <Redirect to="/" />;
-  return <AppShell>{children}</AppShell>;
+  return clerkEnabled
+    ? <ClerkProtectedContent>{children}</ClerkProtectedContent>
+    : <PiProtectedContent>{children}</PiProtectedContent>;
 }
 
-function Router() {
+function RouteLoading() {
+  return (
+    <div className="grid min-h-[100dvh] place-items-center bg-[#0D0D0D]" role="status" aria-label="Loading page">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#244331] border-t-[#1DE9B6]" />
+    </div>
+  );
+}
+
+function PiProfileRoute() {
+  const enableClerk = useContext(AuthModeContext);
+  return <ProfilePage onEnableClerk={enableClerk} />;
+}
+
+function Router({ clerkEnabled }: { clerkEnabled: boolean }) {
   const [location] = useLocation();
 
   return (
     <ErrorBoundary resetKey={location}>
-      <Switch>
-        <Route path="/privacy-policy" component={PrivacyPolicyPage} />
-        <Route path="/terms-of-service" component={TermsOfServicePage} />
-        <Route path="/" component={HomeRedirect} />
-        <Route path="/sso-callback">{() => <AuthenticateWithRedirectCallback />}</Route>
-        <Route path="/sign-in/*?" component={SignInPage} />
-        <Route path="/sign-up/*?" component={SignUpPage} />
-        <Route path="/contracts/new">
-          {() => <ProtectedContent><NewContract /></ProtectedContent>}
-        </Route>
-        <Route path="/admin">
-          {() => <ProtectedContent><AdminDashboard /></ProtectedContent>}
-        </Route>
-        <Route path="/contracts/:id/disputes">
-          {() => <ProtectedContent><Disputes /></ProtectedContent>}
-        </Route>
-        <Route path="/contracts/:id/chat">
-          {() => <ProtectedContent><ContractChat /></ProtectedContent>}
-        </Route>
-        <Route path="/marketplace">{() => <ProtectedContent><Marketplace /></ProtectedContent>}</Route>
-        <Route path="/rates">{() => <ProtectedContent><Rates /></ProtectedContent>}</Route>
-        <Route path="/profile">{() => <ProtectedContent><ProfilePage /></ProtectedContent>}</Route>
-        <Route path="/wallet">{() => PI_SANDBOX ? <ProtectedContent><WalletPage /></ProtectedContent> : <Redirect to="/" />}</Route>
-        <Route path="/contracts/:id">
-          {() => <ProtectedContent><ContractDetail /></ProtectedContent>}
-        </Route>
-        <Route path="/activity">
-          {() => <ProtectedContent><ActivityPage /></ProtectedContent>}
-        </Route>
-        <Route path="/chat/:roomId">
-          {() => <ProtectedContent><PublicChatRoomPage /></ProtectedContent>}
-        </Route>
-        <Route path="/chat">
-          {() => <ProtectedContent><ChatRoomsPage /></ProtectedContent>}
-        </Route>
-        <Route>
-          {() => <ProtectedContent><NotFound /></ProtectedContent>}
-        </Route>
-      </Switch>
+      <Suspense fallback={<RouteLoading />}>
+        <Switch>
+          <Route path="/privacy-policy" component={PrivacyPolicyPage} />
+          <Route path="/terms-of-service" component={TermsOfServicePage} />
+          <Route path="/">{() => clerkEnabled
+            ? <ClerkHomeRedirect fallback={<LandingPage />}><Dashboard /></ClerkHomeRedirect>
+            : <PiHomeRedirect />}</Route>
+          <Route path="/sso-callback">{() => clerkEnabled ? <ClerkSsoCallback /> : <Redirect to="/" />}</Route>
+          <Route path="/sign-in/*?" component={SignInPage} />
+          <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/contracts/new">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><NewContract /></ProtectedPage>}
+          </Route>
+          <Route path="/admin">
+            {() => <AdminDashboard />}
+          </Route>
+          <Route path="/contracts/:id/disputes">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><Disputes /></ProtectedPage>}
+          </Route>
+          <Route path="/contracts/:id/chat">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><ContractChat /></ProtectedPage>}
+          </Route>
+          <Route path="/marketplace">{() => <ProtectedPage clerkEnabled={clerkEnabled}><Marketplace /></ProtectedPage>}</Route>
+          <Route path="/listings">{() => <ProtectedPage clerkEnabled={clerkEnabled}><MyListings /></ProtectedPage>}</Route>
+          <Route path="/rates">{() => <ProtectedPage clerkEnabled={clerkEnabled}><Rates /></ProtectedPage>}</Route>
+          <Route path="/profile">{() => <ProtectedPage clerkEnabled={clerkEnabled}>{clerkEnabled ? <ProfilePage /> : <PiProfileRoute />}</ProtectedPage>}</Route>
+          <Route path="/wallet">{() => PI_SANDBOX ? <ProtectedPage clerkEnabled={clerkEnabled}><WalletPage /></ProtectedPage> : <Redirect to="/" />}</Route>
+          <Route path="/contracts/:id">
+            {() => (
+              <ProtectedPage clerkEnabled={clerkEnabled}>
+                {clerkEnabled ? <ClerkContractDetailRoute /> : <ContractDetail />}
+              </ProtectedPage>
+            )}
+          </Route>
+          <Route path="/activity">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><ActivityPage /></ProtectedPage>}
+          </Route>
+          <Route path="/chat/:roomId">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><PublicChatRoomPage /></ProtectedPage>}
+          </Route>
+          <Route path="/chat">
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><ChatRoomsPage /></ProtectedPage>}
+          </Route>
+          <Route>
+            {() => <ProtectedPage clerkEnabled={clerkEnabled}><NotFound /></ProtectedPage>}
+          </Route>
+        </Switch>
+      </Suspense>
     </ErrorBoundary>
   );
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
-  return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider>
-          <PiIframeSessionProvider>
-            <PiAppSessionProvider>
-              <ClerkQueryClientCacheInvalidator />
-              <Router />
-            </PiAppSessionProvider>
-          </PiIframeSessionProvider>
-        </I18nProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
+function AuthModeResolver() {
+  const { loading: piLoading, signedIn: piSignedIn } = usePiAppSession();
+  const { session: piIframeSession } = usePiIframeSession();
+  const [location] = useLocation();
+  const [forceClerk, setForceClerk] = useState(false);
+  const enableClerk = useCallback(() => setForceClerk(true), []);
+  const piAuthRoute = location.startsWith('/sign-in') || location.startsWith('/sign-up');
+  const clerkRequiredRoute = location === '/sso-callback' ||
+    location === '/admin' ||
+    location.startsWith('/admin/');
+  const usePiOnly = !forceClerk && !clerkRequiredRoute && (
+    isPiBrowserRuntime() ||
+    piAuthRoute ||
+    piSignedIn ||
+    Boolean(piIframeSession)
   );
+
+  let content: ReactNode;
+  if (usePiOnly) {
+    content = <Router clerkEnabled={false} />;
+  } else if (piLoading && !forceClerk && !clerkRequiredRoute) {
+    content = <div className="grid min-h-[100dvh] place-items-center bg-[#0D0D0D]">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#244331] border-t-[#1DE9B6]" aria-label="Loading" />
+    </div>;
+  } else {
+      content = <ClerkProviderWithRoutes><Router clerkEnabled /></ClerkProviderWithRoutes>;
+  }
+
+  return <AuthModeContext.Provider value={enableClerk}>{content}</AuthModeContext.Provider>;
 }
 
 function App() {
   return (
     <TooltipProvider>
-      <WouterRouter base={basePath}>
-        <ClerkProviderWithRoutes />
-      </WouterRouter>
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>
+          <PiIframeSessionProvider>
+            <PiAppSessionProvider>
+              <WouterRouter base={basePath}>
+                <AuthModeResolver />
+              </WouterRouter>
+            </PiAppSessionProvider>
+          </PiIframeSessionProvider>
+        </I18nProvider>
+      </QueryClientProvider>
       <Toaster />
     </TooltipProvider>
   );

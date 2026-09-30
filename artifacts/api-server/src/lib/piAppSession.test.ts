@@ -2,11 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createPiAppSessionCredential,
+  hasPiAppSessionCookie,
   hashPiAppSessionToken,
   isPiAppSessionToken,
+  piAppSessionCookieOptions,
   parsePiAppSessionCookie,
   resolvePiAppSession,
 } from "./piAppSession.ts";
+
+test("Pi app cookies support secure WebViews and use a root path", () => {
+  const secureOptions = piAppSessionCookieOptions(true);
+  assert.match(secureOptions, /SameSite=None/);
+  assert.match(secureOptions, /Path=\//);
+  assert.match(secureOptions, /Secure/);
+  assert.match(secureOptions, /HttpOnly/);
+
+  const localOptions = piAppSessionCookieOptions(false);
+  assert.match(localOptions, /SameSite=Lax/);
+  assert.match(localOptions, /Path=\//);
+  assert.doesNotMatch(localOptions, /Secure/);
+});
 
 test("Pi app credentials are opaque 43-character tokens hashed with SHA-256", () => {
   const credential = createPiAppSessionCredential();
@@ -17,9 +32,14 @@ test("Pi app credentials are opaque 43-character tokens hashed with SHA-256", ()
 
 test("Pi app cookie parsing rejects malformed and unrelated cookies", () => {
   const token = createPiAppSessionCredential().token;
-  assert.equal(parsePiAppSessionCookie(`other=x; pitrust_pi_session=${token}`), token);
-  assert.equal(parsePiAppSessionCookie("pitrust_pi_session=not-a-token"), null);
+  assert.equal(parsePiAppSessionCookie(`other=x; pi_app_session=${token}`), token);
+  assert.equal(parsePiAppSessionCookie(`pitrust_pi_session=${token}`), token);
+  assert.equal(parsePiAppSessionCookie("pi_app_session=not-a-token"), null);
   assert.equal(parsePiAppSessionCookie(undefined), null);
+  assert.equal(hasPiAppSessionCookie("pi_app_session=not-a-token"), true);
+  assert.equal(hasPiAppSessionCookie("pitrust_pi_session=old-token"), true);
+  assert.equal(hasPiAppSessionCookie("other=x"), false);
+  assert.equal(hasPiAppSessionCookie(undefined), false);
 });
 
 test("Pi app session resolution enforces expiry lookup and canonical UID owner", async () => {

@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/i18n";
-import { usePiIframeSession } from "@/lib/pi-iframe-session";
-import { usePiAppSession } from "@/lib/pi-app-session";
+import { useToast } from "@/hooks/use-toast";
+import {
+  isAuthenticatedPiAppSession,
+  setPiAppAccessToken,
+  usePiAppSession,
+} from "@/lib/pi-app-session";
 import {
   getPiRuntimeDiagnostics,
   getPiSdkTimingSnapshot,
@@ -37,16 +41,8 @@ export function PiSignInButton({
 }) {
   const [, setLocation] = useLocation();
   const { t } = useI18n();
-  const { refresh: refreshPiAppSession } = usePiAppSession();
-  const {
-    session: iframeSession,
-    setSession: setIframeSession,
-    clearSession: clearIframeSession,
-  } = usePiIframeSession();
-  const iframeIdentityMode =
-    PI_SANDBOX &&
-    import.meta.env.VITE_PI_IFRAME_SESSION_ENABLED === "true" &&
-    window.self !== window.top;
+  const { toast } = useToast();
+  const { accept: acceptPiAppSession } = usePiAppSession();
   const [busy, setBusy] = useState(false);
   const [piAuthenticatePending, setPiAuthenticatePending] = useState(false);
   const [error, setError] = useState("");
@@ -282,99 +278,6 @@ export function PiSignInButton({
       }
 
       const apiBase = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}api/`;
-      if (iframeIdentityMode) {
-        stage = "pi-iframe-session";
-        const createResponse = await fetch(`${apiBase}pi/iframe-session`, {
-          method: "POST",
-          credentials: "omit",
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: auth.accessToken, intent: mode }),
-        });
-        responseStatus = createResponse.status;
-        const createPayload: unknown = await createResponse.json().catch(() => null);
-        const createRecord = typeof createPayload === "object" && createPayload !== null
-          ? createPayload as { sessionToken?: unknown; expiresAt?: unknown }
-          : undefined;
-        const sessionToken = typeof createRecord?.sessionToken === "string"
-          ? createRecord.sessionToken
-          : undefined;
-        const expiresAt = typeof createRecord?.expiresAt === "string"
-          ? createRecord.expiresAt
-          : undefined;
-        if (
-          !createResponse.ok ||
-          !sessionToken ||
-          !expiresAt ||
-          !Number.isFinite(Date.parse(expiresAt)) ||
-          Date.parse(expiresAt) <= Date.now()
-        ) {
-          throw new Error("pi-iframe-session-create-failed");
-        }
-
-        const identityResponse = await fetch(
-          `${apiBase}pi/iframe-session/identity`,
-          {
-            method: "GET",
-            credentials: "omit",
-            cache: "no-store",
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          },
-        );
-        responseStatus = identityResponse.status;
-        const identityPayload: unknown = await identityResponse.json().catch(() => null);
-        const identityRecord = typeof identityPayload === "object" && identityPayload !== null
-          ? identityPayload as { uid?: unknown; username?: unknown }
-          : undefined;
-        if (
-          !identityResponse.ok ||
-          typeof identityRecord?.uid !== "string" ||
-          !identityRecord.uid ||
-          !(typeof identityRecord.username === "string" || identityRecord.username === null)
-        ) {
-          throw new Error("pi-iframe-identity-verification-failed");
-        }
-
-        setIframeSession({
-          token: sessionToken,
-          expiresAt,
-          identity: {
-            uid: identityRecord.uid,
-            username: identityRecord.username,
-          },
-        });
-        recordFlowStep("api", { outcome: "success", status: createResponse.status });
-        apiResultRecorded = true;
-        setDiagnostics((current) => ({
-          ...current,
-          flow: {
-            ...current.flow,
-            signIn: {
-              outcome: "not-observed",
-              reason: "تم التحقق من الهوية دون إنشاء جلسة Clerk.",
-            },
-            setActive: {
-              outcome: "not-observed",
-              reason: "جلسة Pi هذه لا تنشئ جلسة Clerk.",
-            },
-            session: {
-              outcome: "not-observed",
-              reason: "جلسة Pi محفوظة في ذاكرة الصفحة فقط.",
-            },
-            user: {
-              outcome: "not-observed",
-              reason: "هذا المسار لا يحمّل مستخدم Clerk.",
-            },
-            touch: {
-              outcome: "not-observed",
-              reason: "لم يُستخدم Clerk في مسار الهوية هذا.",
-            },
-          },
-        }));
-        setLocation("/");
-        return;
-      }
-
       stage = "backend-authenticate";
       const response = await fetch(`${apiBase}pi/session`, {
         method: "POST",
@@ -389,14 +292,9 @@ export function PiSignInButton({
       } catch {
         payload = null;
       }
-      const payloadRecord = typeof payload === "object" && payload !== null
-        ? payload as { authenticated?: unknown; accountId?: unknown; piUid?: unknown; username?: unknown }
-        : undefined;
-      const appSessionConfirmed = response.ok &&
-        payloadRecord?.authenticated === true &&
-        typeof payloadRecord.accountId === "string" &&
-        typeof payloadRecord.piUid === "string";
-       const apiResult: DiagnosticResult = appSessionConfirmed
+      const appSession = isAuthenticatedPiAppSession(payload) ? payload : null;
+      const appSessionConfirmed = response.ok && appSession !== null;
+      const apiResult: DiagnosticResult = appSessionConfirmed
         ? { outcome: "success", status: response.status }
         : {
             outcome: "failure",
@@ -416,16 +314,20 @@ export function PiSignInButton({
         if (response.status === 404) throw new Error(t("auth.piNotLinked"));
         throw new Error(t("auth.piSignInFailed"));
       }
-      stage = "verify-pi-app-session";
-      const sessionConfirmed = await refreshPiAppSession();
-      recordFlowStep("session", sessionConfirmed
-        ? { outcome: "success", reason: "تم تأكيد جلسة Pi الخاصة بالتطبيق." }
-        : { outcome: "failure", code: "pi_app_session_missing", reason: "لم تظهر جلسة Pi بعد الاستجابة الناجحة." });
+      stage = "accept-pi-app-session";
+      setPiAppAccessToken(auth.accessToken);
+      acceptPiAppSession(appSession);
+      if (mode === "sign-up" && appSession.existingAccount === true) {
+        toast({ description: t("auth.piExistingAccountWelcome") });
+      }
+      recordFlowStep("session", {
+        outcome: "success",
+        reason: "تم اعتماد بيانات جلسة Pi التي أكدها الخادم داخل التطبيق.",
+      });
       recordFlowStep("signIn", { outcome: "not-observed", reason: "لا يحتاج مسار Pi إلى جلسة Clerk." });
       recordFlowStep("setActive", { outcome: "not-observed", reason: "لا يحتاج مسار Pi إلى Clerk." });
       recordFlowStep("user", { outcome: "not-observed", reason: "هوية التطبيق مصدرها Pi." });
       recordFlowStep("touch", { outcome: "not-observed", reason: "لم يُستخدم Clerk في مسار الهوية هذا." });
-      if (!sessionConfirmed) throw new Error("pi-app-session-not-confirmed");
       shouldRedirect = true;
     } catch (cause) {
       setRedirectInSeconds(null);
@@ -462,6 +364,13 @@ export function PiSignInButton({
         markPendingStepsNotObserved(["api", "signIn", "setActive", "session", "user", "touch"]);
       } else if (stage === "backend-authenticate") {
         markPendingStepsNotObserved(["signIn", "setActive", "session", "user", "touch"]);
+      } else if (stage === "accept-pi-app-session") {
+        recordFlowStep("session", {
+          outcome: "failure",
+          code: "pi_app_session_accept_failed",
+          reason: "تعذر اعتماد جلسة Pi داخل التطبيق.",
+        });
+        markPendingStepsNotObserved(["signIn", "setActive", "user", "touch"]);
       } else if (stage === "pi-iframe-session") {
         if (!apiResultRecorded) {
           recordFlowStep("api", {
@@ -502,7 +411,7 @@ export function PiSignInButton({
       if (!piAuthenticateInFlight) attemptActiveRef.current = false;
     }
 
-    if (shouldRedirect) window.location.replace(import.meta.env.BASE_URL);
+    if (shouldRedirect) setLocation("/");
   };
 
   return (
@@ -519,39 +428,9 @@ export function PiSignInButton({
           ? piAuthenticatePending && !busy
             ? t("auth.piAuthStillPending")
             : t("auth.connectingWithPi")
-          : iframeIdentityMode
-            ? document.documentElement.dir === "rtl"
-              ? "تسجيل الدخول عبر Pi"
-              : "Sign in with Pi"
-            : mode === "sign-in" ? t("auth.signInWithPi") : t("auth.signUpWithPi")}
+          : mode === "sign-in" ? t("auth.signInWithPi") : t("auth.signUpWithPi")}
       </button>
       {modeSwitchLink}
-      {iframeIdentityMode && iframeSession && (
-        <div
-          role="status"
-          className="mt-3 rounded-lg border border-[#28583c] bg-[#102117] px-4 py-3 text-center text-xs leading-6 text-[#b7c5bc]"
-          data-testid="pi-iframe-identity-session"
-        >
-          <p>
-            {document.documentElement.dir === "rtl"
-              ? "تم تسجيل الدخول عبر Pi في بيئة Sandbox. تنتهي الجلسة بعد 8 ساعات."
-              : "Signed in with Pi in the Sandbox. This session expires after 8 hours."}
-          </p>
-          {iframeSession.identity.username && (
-            <p className="font-medium text-[#1DE9B6]">
-              @{iframeSession.identity.username}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={clearIframeSession}
-            className="mt-1 text-[#1DE9B6] underline underline-offset-4"
-            data-testid="button-clear-pi-iframe-session"
-          >
-            {document.documentElement.dir === "rtl" ? "إنهاء الجلسة" : "End session"}
-          </button>
-        </div>
-      )}
       {error && <p role="alert" className="mt-3 text-center text-xs text-[#ff9b8e]">{error}</p>}
       {requiresReload && (
         <button
@@ -576,12 +455,16 @@ export function PiSignInButton({
           </button>
         </div>
       )}
-      <p className="mt-3 text-center text-xs leading-relaxed text-[#849a8b]">{t("auth.piExistingAccountHint")}</p>
-      <PiAuthDiagnosticsPanel
-        snapshot={diagnostics}
-        redirectInSeconds={redirectInSeconds}
-        comparison={comparison}
-      />
+      <p className="mt-3 text-center text-xs leading-relaxed text-[#849a8b]">
+        {t(mode === "sign-up" ? "auth.piNewUserHint" : "auth.piExistingAccountHint")}
+      </p>
+      {import.meta.env.DEV && (
+        <PiAuthDiagnosticsPanel
+          snapshot={diagnostics}
+          redirectInSeconds={redirectInSeconds}
+          comparison={comparison}
+        />
+      )}
     </div>
   );
 }

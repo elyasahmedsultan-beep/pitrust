@@ -1,15 +1,15 @@
 import PiNetwork from "pi-backend";
-import { fixedPiUnits } from "./pi.ts";
+import { fixedPiUnits } from "./piAmount.ts";
 import {
   configuredPiApiKey,
   configuredPiNetwork,
   configuredWalletPrivateSeed,
 } from "./piA2uConfig.ts";
+import { isValidPiWalletAddress } from "./piWallet.ts";
 
 export {
   payoutExecutionEnabled,
   productionPayoutEnabled,
-  testnetPayoutEnabled,
 } from "./piA2uConfig.ts";
 
 export type PiA2UPayment = Awaited<ReturnType<PiNetwork["getPayment"]>>;
@@ -22,6 +22,7 @@ export type PayoutSnapshot = {
   inviter_reward: number | string;
   seller_amount: number | string;
   recipient_address: string;
+  recipient_wallet_address: string | null;
   inviter_id: string | null;
   pi_payment_id: string | null;
   txid: string | null;
@@ -30,18 +31,15 @@ export type PayoutSnapshot = {
   dispute_id?: string | null;
 };
 
-export function currentPiNetwork(): "Pi Network" | "Pi Testnet" | null {
-  const network = configuredPiNetwork();
-  if (network === "mainnet") return "Pi Network";
-  if (network === "testnet") return "Pi Testnet";
-  return null;
+export function currentPiNetwork(): "Pi Network" | null {
+  return configuredPiNetwork() === "mainnet" ? "Pi Network" : null;
 }
 
 export function createPiA2USdk(): PiNetwork {
   const apiKey = configuredPiApiKey();
   const walletPrivateSeed = configuredWalletPrivateSeed();
   if (!apiKey || !walletPrivateSeed) {
-    throw new Error("Pi A2U credentials for the selected network are not configured");
+    throw new Error("Pi Mainnet A2U credentials are not configured");
   }
   return new PiNetwork(apiKey, walletPrivateSeed);
 }
@@ -66,16 +64,24 @@ export function payoutPaymentMetadata(payout: PayoutSnapshot): Record<string, un
 }
 
 export function matchesPayoutPayment(
-  payment: PiA2UPayment,
+  payment: PiA2UPayment | null | undefined,
   payout: PayoutSnapshot,
 ): boolean {
+  if (!payment || typeof payment !== "object") return false;
+  const status = payment.status;
+  if (!status || typeof status !== "object") return false;
+
   const metadata = payment.metadata as Record<string, unknown> | null;
   const purpose = payout.purpose ?? "standard_release";
   const arbitration = purpose !== "standard_release";
   return Boolean(
     payment.identifier &&
+    payout.network === "Pi Network" &&
     (!payout.pi_payment_id || payment.identifier === payout.pi_payment_id) &&
     payment.user_uid === payout.recipient_address &&
+    typeof payout.recipient_wallet_address === "string" &&
+    isValidPiWalletAddress(payout.recipient_wallet_address) &&
+    payment.to_address === payout.recipient_wallet_address &&
     payment.direction === "app_to_user" &&
     payment.network === payout.network &&
     fixedPiUnits(payment.amount) !== null &&
@@ -94,20 +100,21 @@ export function matchesPayoutPayment(
     fixedPiUnits(String(metadata.grossAmountPi ?? "")) === fixedPiUnits(payout.amount) &&
     fixedPiUnits(String(metadata.platformFeePi ?? "")) === fixedPiUnits(payout.platform_fee) &&
     fixedPiUnits(String(metadata.inviterRewardPi ?? "")) === fixedPiUnits(payout.inviter_reward) &&
-    !payment.status.cancelled &&
-    !payment.status.user_cancelled
+    status.cancelled === false &&
+    status.user_cancelled === false
   );
 }
 
 export function payoutPaymentIsCompleted(
-  payment: PiA2UPayment,
+  payment: PiA2UPayment | null | undefined,
   expectedTxid: string,
 ): boolean {
-  return payment.status.developer_approved &&
-    payment.status.transaction_verified &&
-    payment.status.developer_completed &&
-    payment.transaction?.verified === true &&
-    payment.transaction.txid === expectedTxid;
+  const status = payment?.status;
+  return status?.developer_approved === true &&
+    status?.transaction_verified === true &&
+    status?.developer_completed === true &&
+    payment?.transaction?.verified === true &&
+    payment?.transaction?.txid === expectedTxid;
 }
 
 export function payoutAmountAsNumber(value: number | string): number {

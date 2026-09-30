@@ -13,4 +13,5 @@ export interface Delivery {
   submitterId: string;
   evidence: DeliveryEvidence;
   createdAt: Date;
+  submittedAt: Date;
 }

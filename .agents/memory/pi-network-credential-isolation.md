@@ -3,8 +3,8 @@ name: Pi network credential isolation
 description: Keep Pi Testnet and Mainnet requests, wallets, and payouts isolated.
 ---
 
-Resolve Pi API credentials and the app wallet seed only from the credentials for the selected network. Testnet A2U must require an explicit opt-in and must never fall back to Mainnet credentials. Validate the Pi payment DTO network against the persisted payout intent before completion or reconciliation.
+Use `PI_NETWORK_API_KEY` for all Pi Platform API requests made by `piRequest`, including payment lookup, approval, completion, cancellation, and verification. Do not fall back to `PI_API_KEY` for those requests. Keep the A2U payout path on its separate network-specific API-key and wallet-seed configuration; Testnet A2U must require an explicit opt-in and never fall back to Mainnet credentials. Validate the payment DTO network against the persisted payout intent before completion or reconciliation.
 
-**Why:** Pi Developer Portal apps are bound to one network, while the server-side A2U SDK uses the network recorded on the Pi payment to choose its blockchain endpoint. A mismatched key or seed can create a payout path that does not match the app's intended environment.
+**Why:** Approval and completion paths now use the unified Pi Network API key, while A2U payout credentials remain isolated to avoid confusing a Pi Platform request key with a payout wallet's signing credentials.
 
-**How to apply:** Keep separate Testnet and Mainnet secrets, require the corresponding network flag and feature gate, and filter reconciliation to intents for the selected network. Never infer the network from the presence of a generic secret.
+**How to apply:** Require `PI_ENV=mainnet` before returning `PI_NETWORK_API_KEY`; use it for all platform payment operations with no legacy fallback. Keep payout key/seed selection and reconciliation scoped to the explicitly selected network.

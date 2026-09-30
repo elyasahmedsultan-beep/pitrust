@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import {
   ListPublicChatMessagesQueryParams,
   ListPublicChatMessagesResponse,
@@ -12,7 +12,7 @@ import type { ChatLanguage } from "@workspace/api-zod";
 import { authenticatedUserId, requireSession } from "../lib/session";
 import { requireSameOrigin } from "../lib/adminPasswordAuth";
 import { isMissingSupabaseRelation, supabaseRequest } from "../lib/supabase";
-import { translatePublicChatBatch } from "../lib/publicChatTranslation";
+import { translateChatBatch, translationErrorDetails } from "../lib/messageTranslation";
 
 const router: IRouter = Router();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -43,7 +43,10 @@ router.use("/chat", (_req, res, next) => {
   res.setHeader("Cache-Control", "private, no-store");
   next();
 });
-router.use("/chat", requireSession);
+router.use("/rooms", (_req, res, next) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  next();
+});
 
 function pathParam(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
@@ -113,7 +116,7 @@ async function readTranslations(
   return new Map(rows.map((row) => [row.message_id, row.translated_text]));
 }
 
-router.get("/chat/rooms", async (req, res): Promise<void> => {
+async function listPublicChatRooms(req: Request, res: Response): Promise<void> {
   try {
     const rooms = await supabaseRequest<ChatRoomRow[]>(
       "public_chat_rooms?active=eq.true&select=id,name,language_code,active&order=language_code.asc,name.asc",
@@ -128,7 +131,13 @@ router.get("/chat/rooms", async (req, res): Promise<void> => {
     req.log.error({ errorType: error instanceof Error ? error.name : "unknown" }, "Could not list public chat rooms");
     res.status(errorStatus(error)).json({ error: "Chat rooms are unavailable" });
   }
-});
+}
+
+router.get("/chat/rooms", listPublicChatRooms);
+router.get("/rooms", listPublicChatRooms);
+
+router.use("/chat", requireSession);
+router.use("/rooms", requireSession);
 
 router.get("/chat/messages", async (req, res): Promise<void> => {
   const query = ListPublicChatMessagesQueryParams.safeParse(req.query);
@@ -185,6 +194,9 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
       readTranslations(messageIds, targetLanguage),
     ]);
 
+    const sourceLanguageByMessage = new Map(
+      newestFirst.map((row) => [row.id, row.source_language]),
+    );
     const untranslated = newestFirst.filter((row) =>
       row.content !== null &&
       row.source_language !== targetLanguage &&
@@ -196,42 +208,80 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
     }
     const pendingTranslations = untranslated.filter((row) =>
       (translationRetryAfter.get(`${row.id}:${targetLanguage}`) ?? 0) <= now,
-    );
+    ).slice(0, 12);
     if (pendingTranslations.length) {
+      for (const row of pendingTranslations) {
+        translationRetryAfter.set(`${row.id}:${targetLanguage}`, Date.now() + TRANSLATION_RETRY_DELAY_MS);
+      }
       try {
-        const translated = await translatePublicChatBatch(
+        const translated = await translateChatBatch(
           pendingTranslations.map((row) => ({
             content: row.content!,
-            sourceLanguage: row.source_language,
+            sourceLanguageHint: row.source_language,
           })),
           targetLanguage,
         );
         const newTranslations = pendingTranslations.flatMap((row, index) => {
-          const translatedText = translated.get(index);
-          if (!translatedText) {
+          const result = translated.get(index);
+          if (!result) {
             translationRetryAfter.set(`${row.id}:${targetLanguage}`, Date.now() + TRANSLATION_RETRY_DELAY_MS);
             return [];
           }
-          translationMap.set(row.id, translatedText);
+          sourceLanguageByMessage.set(row.id, result.sourceLanguage);
+          if (result.sourceLanguage !== row.source_language) {
+            void supabaseRequest(`public_chat_messages?id=eq.${encodeURIComponent(row.id)}`, {
+              method: "PATCH",
+              headers: { Prefer: "return=minimal" },
+              body: JSON.stringify({ source_language: result.sourceLanguage }),
+            }).catch((error) => {
+              req.log.warn(
+                { errorType: error instanceof Error ? error.name : "unknown" },
+                "Could not persist detected public chat language",
+              );
+            });
+          }
+          if (!result.translatedText) {
+            if (result.sourceLanguage === targetLanguage) {
+              translationRetryAfter.delete(`${row.id}:${targetLanguage}`);
+            } else {
+              translationRetryAfter.set(`${row.id}:${targetLanguage}`, Date.now() + TRANSLATION_RETRY_DELAY_MS);
+            }
+            return [];
+          }
+          translationRetryAfter.delete(`${row.id}:${targetLanguage}`);
+          translationMap.set(row.id, result.translatedText);
           return [{
             message_id: row.id,
             target_language: targetLanguage,
-            translated_text: translatedText,
+            translated_text: result.translatedText,
           }];
         });
         if (newTranslations.length) {
-          await supabaseRequest("public_chat_message_translations?on_conflict=message_id,target_language", {
-            method: "POST",
-            headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-            body: JSON.stringify(newTranslations),
-          });
+          try {
+            await supabaseRequest("public_chat_message_translations?on_conflict=message_id,target_language", {
+              method: "POST",
+              headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+              body: JSON.stringify(newTranslations),
+            });
+          } catch (error) {
+            for (const translation of newTranslations) {
+              translationRetryAfter.set(
+                `${translation.message_id}:${targetLanguage}`,
+                Date.now() + TRANSLATION_RETRY_DELAY_MS,
+              );
+            }
+            req.log.warn(
+              { errorType: error instanceof Error ? error.name : "unknown" },
+              "Could not persist automatic public chat translations",
+            );
+          }
         }
       } catch (error) {
         for (const row of pendingTranslations) {
           translationRetryAfter.set(`${row.id}:${targetLanguage}`, Date.now() + TRANSLATION_RETRY_DELAY_MS);
         }
         req.log.warn(
-          { errorType: error instanceof Error ? error.name : "unknown" },
+          translationErrorDetails(error),
           "Automatic public chat translation was unavailable",
         );
       }
@@ -240,9 +290,10 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
     const messages = [...newestFirst].reverse().map((row) => {
       const isDeleted = row.deleted_at !== null || row.content === null;
       const translatedText = isDeleted ? null : translationMap.get(row.id) ?? null;
+      const sourceLanguage = sourceLanguageByMessage.get(row.id) ?? row.source_language;
       const translationStatus = isDeleted
         ? "same_language"
-        : row.source_language === targetLanguage
+        : sourceLanguage === targetLanguage
           ? "same_language"
           : translatedText
             ? "translated"
@@ -252,7 +303,7 @@ router.get("/chat/messages", async (req, res): Promise<void> => {
         roomId: row.room_id,
         senderName: displayNames.get(row.sender_user_id) || row.sender_name || "Member",
         content: isDeleted ? null : row.content,
-        sourceLanguage: row.source_language,
+        sourceLanguage,
         translatedText,
         translationStatus,
         createdAt: row.created_at,
@@ -323,44 +374,71 @@ router.post("/chat/rooms/:roomId/messages", requireSameOrigin, async (req, res):
     });
     const row = rows[0];
     if (!row) throw new Error("Chat message was not returned after insert");
+    let sourceLanguage = row.source_language;
     let translatedText: string | null = null;
-    let translationStatus: "translated" | "same_language" | "unavailable" =
-      row.source_language === body.data.targetLanguage ? "same_language" : "unavailable";
-    if (row.source_language !== body.data.targetLanguage) {
-      try {
-        const translations = await translatePublicChatBatch([{
-          content: row.content,
-          sourceLanguage: row.source_language,
-        }], body.data.targetLanguage);
-        translatedText = translations.get(0) ?? null;
-        if (translatedText) {
-          await supabaseRequest(
-            "public_chat_message_translations?on_conflict=message_id,target_language",
-            {
-              method: "POST",
-              headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-              body: JSON.stringify({
-                message_id: row.id,
-                target_language: body.data.targetLanguage,
-                translated_text: translatedText,
-              }),
-            },
-          );
-          translationStatus = "translated";
+    let translationStatus: "translated" | "same_language" | "unavailable" = "unavailable";
+    try {
+      const translations = await translateChatBatch([{
+        content: row.content,
+        sourceLanguageHint: row.source_language,
+      }], body.data.targetLanguage);
+      const result = translations.get(0);
+      if (result) {
+        sourceLanguage = result.sourceLanguage;
+        translatedText = result.translatedText;
+        translationStatus = translatedText
+          ? "translated"
+          : sourceLanguage === body.data.targetLanguage
+            ? "same_language"
+            : "unavailable";
+        if (sourceLanguage !== row.source_language) {
+          try {
+            await supabaseRequest(`public_chat_messages?id=eq.${encodeURIComponent(row.id)}`, {
+              method: "PATCH",
+              headers: { Prefer: "return=minimal" },
+              body: JSON.stringify({ source_language: sourceLanguage }),
+            });
+          } catch (error) {
+            req.log.warn(
+              { errorType: error instanceof Error ? error.name : "unknown" },
+              "Could not persist detected public chat language",
+            );
+          }
         }
-      } catch (error) {
-        req.log.warn(
-          { errorType: error instanceof Error ? error.name : "unknown" },
-          "Automatic public chat translation was unavailable",
-        );
+        if (translatedText) {
+          try {
+            await supabaseRequest(
+              "public_chat_message_translations?on_conflict=message_id,target_language",
+              {
+                method: "POST",
+                headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+                body: JSON.stringify({
+                  message_id: row.id,
+                  target_language: body.data.targetLanguage,
+                  translated_text: translatedText,
+                }),
+              },
+            );
+          } catch (error) {
+            req.log.warn(
+              { errorType: error instanceof Error ? error.name : "unknown" },
+              "Could not persist public chat translation",
+            );
+          }
+        }
       }
+    } catch (error) {
+      req.log.warn(
+        translationErrorDetails(error),
+        "Automatic public chat translation was unavailable",
+      );
     }
     res.status(201).json(SendPublicChatMessageResponse.parse({
       id: row.id,
       roomId: row.room_id,
       senderName,
       content: row.content,
-      sourceLanguage: row.source_language,
+      sourceLanguage,
       translatedText,
       translationStatus,
       createdAt: row.created_at,

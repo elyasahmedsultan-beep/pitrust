@@ -10,10 +10,12 @@ export type ContractStatus =
   | "draft"
   | "awaiting_funding"
   | "funded"
+  | "submitted"
   | "in_delivery"
   | "completed"
   | "disputed"
   | "resolved"
+  | "refunded"
   | "cancelled";
 
 export type DisputeStatus = "open" | "under_review" | "resolved";
@@ -36,6 +38,7 @@ export type ContractRow = {
   next_action: string | null;
   dispute_count: number;
   release_date: string | null;
+  submitted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -82,6 +85,7 @@ export function mapContract(row: ContractRow) {
     nextAction: row.next_action,
     disputeCount: Number(row.dispute_count ?? 0),
     releaseDate: row.release_date,
+    submittedAt: row.submitted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -154,6 +158,8 @@ export function actionForStatus(status: ContractStatus): string | null {
       return "Fund escrow";
     case "funded":
       return "Mark delivery in progress";
+    case "submitted":
+      return "Review submitted delivery";
     case "in_delivery":
       return "Confirm delivery";
     case "completed":
@@ -161,6 +167,7 @@ export function actionForStatus(status: ContractStatus): string | null {
     case "disputed":
       return "Review open dispute";
     case "resolved":
+    case "refunded":
       return null;
     case "cancelled":
       return null;

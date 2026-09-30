@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startPublicChatRetentionCleanup } from "./lib/publicChatRetention";
+import { startAutomaticEscrowReleaseWorker } from "./routes/payouts";
 
 const rawPort = process.env["PORT"];
 
@@ -24,6 +25,9 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   const stopPublicChatRetentionCleanup = startPublicChatRetentionCleanup();
+  const stopAutomaticEscrowReleaseWorker = startAutomaticEscrowReleaseWorker();
   process.once("SIGINT", stopPublicChatRetentionCleanup);
   process.once("SIGTERM", stopPublicChatRetentionCleanup);
+  process.once("SIGINT", stopAutomaticEscrowReleaseWorker);
+  process.once("SIGTERM", stopAutomaticEscrowReleaseWorker);
 });

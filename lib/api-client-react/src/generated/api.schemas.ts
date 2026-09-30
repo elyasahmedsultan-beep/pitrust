@@ -9,6 +9,19 @@ export interface Error {
   error: string;
 }
 
+export interface ContractCancellation {
+  cancelled: true;
+  contractId: string;
+  status: 'cancelled';
+}
+
+export interface TestnetEscrowRefund {
+  refunded: true;
+  idempotent: boolean;
+  balance: number;
+  transactionId: string;
+}
+
 export type ContractPipeline = typeof ContractPipeline[keyof typeof ContractPipeline];
 
 
@@ -28,6 +41,7 @@ export const ContractStatus = {
   draft: 'draft',
   awaiting_funding: 'awaiting_funding',
   funded: 'funded',
+  submitted: 'submitted',
   in_delivery: 'in_delivery',
   completed: 'completed',
   disputed: 'disputed',
@@ -58,6 +72,8 @@ export interface Contract {
   disputeCount: number;
   /** @nullable */
   releaseDate: string | null;
+  /** @nullable */
+  submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -167,6 +183,17 @@ export interface Activity {
   createdAt: string;
 }
 
+export interface Notification {
+  id: string;
+  contractId: string;
+  type: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  /** @nullable */
+  readAt: string | null;
+}
+
 export interface DashboardSummary {
   totalValue: number;
   lockedValue: number;
@@ -184,7 +211,8 @@ export type PiPaymentActionPurpose = typeof PiPaymentActionPurpose[keyof typeof 
 
 
 export const PiPaymentActionPurpose = {
-  escrow_service_deposit: 'escrow_service_deposit',
+  listing_ad: 'listing_ad',
+  contract_funding: 'contract_funding',
 } as const;
 
 export interface PiPaymentAction {
@@ -234,6 +262,7 @@ export interface PiAppSession {
   piUid: string;
   /** @nullable */
   username: string | null;
+  existingAccount?: boolean;
 }
 
 export interface PiAppSessionState {
@@ -295,7 +324,8 @@ export type PiPaymentCompletionPurpose = typeof PiPaymentCompletionPurpose[keyof
 
 
 export const PiPaymentCompletionPurpose = {
-  escrow_service_deposit: 'escrow_service_deposit',
+  listing_ad: 'listing_ad',
+  contract_funding: 'contract_funding',
 } as const;
 
 export interface PiPaymentCompletion {
@@ -305,6 +335,11 @@ export interface PiPaymentCompletion {
   txid?: string;
   purpose?: PiPaymentCompletionPurpose;
 }
+
+export const PiPaymentCancellationValue = {
+  cancelled: true,
+} as const;
+export type PiPaymentCancellation = typeof PiPaymentCancellationValue;
 
 export interface PiApproval {
   approved: boolean;
@@ -316,42 +351,6 @@ export interface PiFundingResult {
   idempotent?: boolean;
   confirmed?: boolean;
   productName?: string;
-}
-
-export const EscrowServiceDepositMetadataValue = {
-  type: 'escrow',
-} as const;
-export type EscrowServiceDepositMetadata = typeof EscrowServiceDepositMetadataValue;
-
-export interface EscrowServiceDepositIntent {
-  productName: 'Escrow Service Deposit';
-  description: 'Secure funds held in escrow for freelance service';
-  amount: 1;
-  memo: 'Escrow deposit for job agreement';
-  metadata: EscrowServiceDepositMetadata;
-}
-
-export type EscrowServiceDepositStatus = typeof EscrowServiceDepositStatus[keyof typeof EscrowServiceDepositStatus];
-
-
-export const EscrowServiceDepositStatus = {
-  pending: 'pending',
-  approved: 'approved',
-  confirmed: 'confirmed',
-} as const;
-
-export interface EscrowServiceDeposit {
-  paymentId: string;
-  productName: 'Escrow Service Deposit';
-  description: 'Secure funds held in escrow for freelance service';
-  amount: 1;
-  memo: 'Escrow deposit for job agreement';
-  metadata: EscrowServiceDepositMetadata;
-  network: 'Pi Network';
-  status: EscrowServiceDepositStatus;
-  /** @nullable */
-  txid: string | null;
-  createdAt: string;
 }
 
 export type PayoutPendingStatus = typeof PayoutPendingStatus[keyof typeof PayoutPendingStatus];
@@ -629,9 +628,17 @@ export const PaymentIntentMetadataFeeType = {
   dispute: 'dispute',
 } as const;
 
+export type PaymentIntentMetadataType = typeof PaymentIntentMetadataType[keyof typeof PaymentIntentMetadataType];
+
+
+export const PaymentIntentMetadataType = {
+  contract_funding: 'contract_funding',
+} as const;
+
 export type PaymentIntentMetadata = {
   contractId: string;
   feeType?: PaymentIntentMetadataFeeType;
+  type?: PaymentIntentMetadataType;
 };
 
 export interface PaymentIntent {
@@ -671,6 +678,46 @@ export interface Listing {
   createdAt: string;
 }
 
+export type OwnedListingPipeline = typeof OwnedListingPipeline[keyof typeof OwnedListingPipeline];
+
+
+export const OwnedListingPipeline = {
+  digital: 'digital',
+  shippable: 'shippable',
+  local_property: 'local_property',
+  custom_terms: 'custom_terms',
+} as const;
+
+export type OwnedListingMetadata = { [key: string]: unknown };
+
+export interface OwnedListing {
+  id: string;
+  title: string;
+  description: string;
+  amount: number;
+  currency: string;
+  pipeline: OwnedListingPipeline;
+  metadata: OwnedListingMetadata;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ListingEditInput {
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  title?: string;
+  /** @maxLength 10000 */
+  description?: string;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @maximum 1000000000
+     * @exclusiveMinimum 0
+     */
+  amount?: number;
+}
+
 export type ListingInputPipeline = typeof ListingInputPipeline[keyof typeof ListingInputPipeline];
 
 
@@ -693,6 +740,86 @@ export interface ListingInput {
   currency: string;
   pipeline: ListingInputPipeline;
   metadata: ListingInputMetadata;
+}
+
+export interface ListingAdFee {
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingAdFeePi: number;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingEditFeePi: number;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingDeleteFeePi: number;
+}
+
+export interface ListingAdFeeUpdate {
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingAdFeePi?: number;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingEditFeePi?: number;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  listingDeleteFeePi?: number;
+}
+
+export type ListingAdPaymentMetadataOperation = typeof ListingAdPaymentMetadataOperation[keyof typeof ListingAdPaymentMetadataOperation];
+
+
+export const ListingAdPaymentMetadataOperation = {
+  publication: 'publication',
+  edit: 'edit',
+  delete: 'delete',
+} as const;
+
+export interface ListingAdPaymentMetadata {
+  type: 'listing_ad';
+  listingId: string;
+  intentId: string;
+  operation?: ListingAdPaymentMetadataOperation;
+}
+
+export type ListingAdPaymentIntentMemo = typeof ListingAdPaymentIntentMemo[keyof typeof ListingAdPaymentIntentMemo];
+
+
+export const ListingAdPaymentIntentMemo = {
+  Listing_publication_fee: 'Listing publication fee',
+  Listing_edit_fee: 'Listing edit fee',
+  Listing_deletion_fee: 'Listing deletion fee',
+} as const;
+
+export interface ListingAdPaymentIntent {
+  listingId: string;
+  intentId: string;
+  /**
+     * Pi amount with up to 8 decimal places; precision is validated by the API.
+     * @minimum 1e-8
+     * @maximum 1000000
+     */
+  amount: number;
+  memo: ListingAdPaymentIntentMemo;
+  metadata: ListingAdPaymentMetadata;
 }
 
 export interface ListingContractInput {
@@ -880,6 +1007,7 @@ export interface Delivery {
   submitterId: string;
   evidence: DeliveryEvidence;
   createdAt: string;
+  submittedAt: string;
 }
 
 export interface SignatureInput {
@@ -896,32 +1024,6 @@ export interface Signature {
   signedAt: string;
 }
 
-export interface ChatMessageInput {
-  /**
-     * @minLength 1
-     * @maxLength 5000
-     */
-  content: string;
-  /**
-     * @minLength 2
-     * @maxLength 20
-     */
-  targetLanguage?: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  contractId: string;
-  senderId: string;
-  content: string;
-  sourceText: string;
-  /** @nullable */
-  translatedText: string | null;
-  /** @nullable */
-  targetLanguage: string | null;
-  createdAt: string;
-}
-
 export type ChatLanguage = typeof ChatLanguage[keyof typeof ChatLanguage];
 
 
@@ -932,6 +1034,44 @@ export const ChatLanguage = {
   id: 'id',
   vi: 'vi',
 } as const;
+
+export interface ChatMessageInput {
+  /**
+     * @minLength 1
+     * @maxLength 5000
+     */
+  content: string;
+  targetLanguage?: ChatLanguage;
+}
+
+/**
+ * @nullable
+ */
+export type ChatMessageSourceLanguage = typeof ChatMessageSourceLanguage[keyof typeof ChatMessageSourceLanguage] | null;
+
+
+export const ChatMessageSourceLanguage = {
+  en: 'en',
+  ar: 'ar',
+  'zh-CN': 'zh-CN',
+  id: 'id',
+  vi: 'vi',
+} as const;
+
+export interface ChatMessage {
+  id: string;
+  contractId: string;
+  senderId: string;
+  content: string;
+  sourceText: string;
+  /** @nullable */
+  sourceLanguage: ChatMessageSourceLanguage;
+  /** @nullable */
+  translatedText: string | null;
+  /** @nullable */
+  targetLanguage: string | null;
+  createdAt: string;
+}
 
 export interface PublicChatRoomInput {
   /**

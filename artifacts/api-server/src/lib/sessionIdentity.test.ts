@@ -3,7 +3,29 @@ import assert from "node:assert/strict";
 import {
   canUseClerkArbitratorIdentity,
   resolveAuthenticatedUserId,
+  shouldInvokeClerkMiddleware,
 } from "./sessionIdentity.ts";
+
+test("Pi session endpoints do not invoke Clerk before or after sign-in", () => {
+  assert.equal(shouldInvokeClerkMiddleware("/pi/session", false), false);
+  assert.equal(shouldInvokeClerkMiddleware("/pi/session", true), false);
+  assert.equal(shouldInvokeClerkMiddleware("/listing-ad-fee", false), false);
+  assert.equal(shouldInvokeClerkMiddleware("/listing-ad-fee", true), false);
+  assert.equal(shouldInvokeClerkMiddleware("/pi/iframe-session/identity", false), false);
+});
+
+test("a resolved Pi session bypasses Clerk for normal API routes", () => {
+  assert.equal(shouldInvokeClerkMiddleware("/profile", true), false);
+  assert.equal(shouldInvokeClerkMiddleware("/chat/rooms", true), false);
+  assert.equal(shouldInvokeClerkMiddleware("/contracts", true), false);
+});
+
+test("Clerk remains enabled for privileged and account-linking routes", () => {
+  assert.equal(shouldInvokeClerkMiddleware("/admin/disputes/123/decide", true), true);
+  assert.equal(shouldInvokeClerkMiddleware("/admin/listing-ad-fee", true), true);
+  assert.equal(shouldInvokeClerkMiddleware("/pi/link", true), true);
+  assert.equal(shouldInvokeClerkMiddleware("/profile", false), true);
+});
 
 test("Pi app session is the normal API identity even when another Clerk account is cached", () => {
   assert.equal(resolveAuthenticatedUserId({
@@ -59,4 +81,28 @@ test("the matching canonical Clerk identity retains arbitrator access", () => {
     piIframeSessionUserId: null,
     piAppSessionUserId: "clerk_admin",
   }), true);
+});
+
+test("a verified Pi access token resolves the existing Pi account and rejects identity conflicts", () => {
+  assert.equal(resolveAuthenticatedUserId({
+    clerkUserId: null,
+    piIframeSessionUserId: null,
+    piAppSessionUserId: null,
+    piAccessTokenUserId: "pi_user_a",
+  }), "pi_user_a");
+  assert.equal(resolveAuthenticatedUserId({
+    clerkUserId: null,
+    piIframeSessionUserId: "iframe_user_a",
+    piAppSessionUserId: "pi_user_a",
+    piAccessTokenUserId: "pi_user_b",
+  }), null);
+});
+
+test("a Pi access token cannot authorize a mismatched Clerk arbitrator identity", () => {
+  assert.equal(canUseClerkArbitratorIdentity({
+    clerkUserId: "clerk_admin",
+    piIframeSessionUserId: null,
+    piAppSessionUserId: null,
+    piAccessTokenUserId: "pi_user_a",
+  }), false);
 });

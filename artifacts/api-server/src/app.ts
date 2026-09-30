@@ -13,9 +13,21 @@ import {
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
-import { attachPiAppSessionUser, attachPiIframeSessionUser } from "./lib/session";
+import {
+  attachPiAccessTokenUser,
+  attachPiAppSessionUser,
+  attachPiIframeSessionUser,
+} from "./lib/session";
+import { shouldInvokeClerkMiddleware } from "./lib/sessionIdentity.ts";
+import { requireSameOrigin } from "./lib/adminPasswordAuth";
 
 const app: Express = express();
+const clerkAuthMiddleware = clerkMiddleware((req) => ({
+  publishableKey: publishableKeyFromHost(
+    getClerkProxyHost(req) ?? "",
+    process.env.CLERK_PUBLISHABLE_KEY,
+  ),
+}));
 
 // Trust only the immediate ingress hop so rate limiting can use the client
 // address forwarded by the Replit edge without trusting arbitrary proxy chains.
@@ -109,15 +121,6 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
-
 app.use("/api", (req, res, next) => {
   // Clerk's own Frontend API proxy is not part of the application API quota.
   if (req.path.startsWith("/__clerk/") || req.path === "/__clerk") {
@@ -140,6 +143,7 @@ app.use("/api", (req, res, next) => {
 app.use("/api/keep-alive", keepAliveRateLimit);
 app.use("/api", attachPiIframeSessionUser);
 app.use("/api", attachPiAppSessionUser);
+app.use("/api", attachPiAccessTokenUser);
 app.use("/api/pi/authenticate", signInRateLimit);
 app.use("/api/pi/link", signInRateLimit);
 app.use("/api/pi/iframe-session", signInRateLimit);
@@ -154,6 +158,30 @@ app.use("/api/admin/disputes/:id/decide", sensitiveActionRateLimit);
 app.use("/api/admin/payouts/reconcile", sensitiveActionRateLimit);
 app.post("/api/chat/rooms/:roomId/messages", publicChatMessageRateLimit);
 app.get("/api/chat/messages", publicChatTranslationRateLimit);
+app.use("/api", (req, res, next) => {
+  const originalPath = req.originalUrl.split("?")[0] || req.path;
+  const apiPath = originalPath.replace(/^\/api(?=\/|$)/, "") || "/";
+  const hasPiSession = Boolean(
+    req.piAppSessionUserId || req.piIframeSessionUserId || req.piAccessTokenUserId,
+  );
+  if (!shouldInvokeClerkMiddleware(apiPath, hasPiSession)) {
+    next();
+    return;
+  }
+  clerkAuthMiddleware(req, res, next);
+});
+app.use("/api", (req, res, next) => {
+  if (
+    !req.piAppSessionUserId ||
+    req.method === "GET" ||
+    req.method === "HEAD" ||
+    req.method === "OPTIONS"
+  ) {
+    next();
+    return;
+  }
+  requireSameOrigin(req, res, next);
+});
 app.use("/api", router);
 
 const safeErrorHandler: ErrorRequestHandler = (error, req, res, next) => {

@@ -86,6 +86,21 @@ function resolveUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function defaultCredentials(input: RequestInfo | URL): RequestCredentials | undefined {
+  if (typeof window === "undefined") return undefined;
+  const requestCredentials = isRequest(input) ? input.credentials : undefined;
+  if (requestCredentials && requestCredentials !== "same-origin") return requestCredentials;
+
+  try {
+    const requestUrl = new URL(resolveUrl(input), window.location.href);
+    return requestUrl.origin === window.location.origin
+      ? "include"
+      : requestCredentials;
+  } catch {
+    return requestCredentials;
+  }
+}
+
 function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   const headers = new Headers();
 
@@ -359,7 +374,18 @@ export async function customFetch<T = unknown>(
 
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
-  if (_authTokenGetter && !headers.has("authorization")) {
+  let sameOriginApiRequest = false;
+  if (typeof window !== "undefined") {
+    try {
+      const requestUrl = new URL(resolveUrl(input), window.location.href);
+      sameOriginApiRequest =
+        requestUrl.origin === window.location.origin &&
+        /(?:^|\/)api(?:\/|$)/.test(requestUrl.pathname);
+    } catch {
+      sameOriginApiRequest = false;
+    }
+  }
+  if (_authTokenGetter && sameOriginApiRequest && !headers.has("authorization")) {
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
@@ -376,7 +402,13 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const credentials = init.credentials ?? defaultCredentials(input);
+  const response = await fetch(input, {
+    ...init,
+    ...(credentials ? { credentials } : {}),
+    method,
+    headers,
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

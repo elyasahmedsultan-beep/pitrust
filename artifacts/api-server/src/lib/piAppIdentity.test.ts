@@ -33,7 +33,7 @@ test("Pi sign-in resolves the existing canonical owner without provisioning", as
     false,
     deps,
   );
-  assert.deepEqual(account, { userId: "clerk_existing_owner" });
+  assert.deepEqual(account, { userId: "clerk_existing_owner", existingAccount: true });
   assert.deepEqual(calls, []);
 });
 
@@ -65,7 +65,7 @@ test("explicit Pi sign-up provisions an app-owned canonical account", async () =
     true,
     deps,
   );
-  assert.deepEqual(account, { userId: "pi_new-account" });
+  assert.deepEqual(account, { userId: "pi_new-account", existingAccount: false });
   assert.deepEqual(calls, [{
     userId: "pi_new-account",
     username: "Pi Member",
@@ -86,5 +86,18 @@ test("concurrent Pi sign-up converges on the winning UID owner", async () => {
     true,
     deps,
   );
-  assert.deepEqual(account, { userId: "pi_winning-account" });
+  assert.deepEqual(account, { userId: "pi_winning-account", existingAccount: true });
+});
+
+test("Pi sign-up intent with an existing owner does not create a profile", async () => {
+  const { deps, calls } = dependencies({
+    findOwnerByPiUid: async () => "pi_existing-account",
+  });
+  const account = await resolvePiAppIdentityAccount(
+    { uid: "uid-1", username: "pioneer" },
+    true,
+    deps,
+  );
+  assert.deepEqual(account, { userId: "pi_existing-account", existingAccount: true });
+  assert.deepEqual(calls, []);
 });

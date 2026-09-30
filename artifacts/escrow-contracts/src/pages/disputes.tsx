@@ -24,7 +24,7 @@ export default function Disputes(){
     event.preventDefault();if(!form.reason.trim()||!form.description.trim()||!form.requestedResolution.trim()){setError(t('errors.required'));return}
     if(pi.state!=='ready'){setError(t('escrow.piPaymentFailed'));return}setError('');
     try{const intent=await fee.mutateAsync({id});if(intent.contractId!==id||intent.metadata.contractId!==id||intent.metadata.feeType!=='dispute')throw new Error('Invalid intent');pending.current={...form};await pi.pay(intent)}
-    catch{pending.current=null;setError(t('escrow.piPaymentFailed'))}
+    catch(error){pending.current=null;setError(error instanceof Error?error.message:t('escrow.piPaymentFailed'))}
   };
   if(contract.isLoading||disputes.isLoading)return <div className="mx-auto max-w-4xl space-y-5"><div className="skeleton h-10 w-2/3 rounded"/><div className="skeleton h-72 rounded-xl"/></div>;
   if(contract.isError||disputes.isError||!contract.data)return <div className="mx-auto max-w-4xl rounded-xl border border-[#62413c] p-8">{t('errors.network')} <button onClick={()=>{contract.refetch();disputes.refetch()}} className="ms-3 text-[#1DE9B6]" data-testid="button-retry-disputes">{t('common.retry')}</button></div>;

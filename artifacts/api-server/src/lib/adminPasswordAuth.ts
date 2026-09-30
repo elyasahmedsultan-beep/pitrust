@@ -7,6 +7,12 @@ export const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 export const ADMIN_PASSWORD_MIN_LENGTH = 16;
 const MAX_PASSWORD_LENGTH = 512;
 
+export function configuredAdminPassword(
+  env: { ADMIN_PASSWORD?: string } = process.env,
+): string | null {
+  return env.ADMIN_PASSWORD ?? null;
+}
+
 type AdminSessionPayload = {
   version: 1;
   issuedAt: number;
@@ -22,7 +28,7 @@ function signingKey(sessionSecret: string, adminPassword: string): Buffer {
 }
 
 export function adminPasswordConfigurationReady(): boolean {
-  const password = process.env.ADMIN_SECRET_PASSWORD;
+  const password = configuredAdminPassword();
   return typeof password === "string" &&
     password.length >= ADMIN_PASSWORD_MIN_LENGTH &&
     password.length <= MAX_PASSWORD_LENGTH &&
@@ -115,7 +121,7 @@ function cookieValue(req: Request): string | null {
 
 export function hasAdminPasswordSession(req: Request): boolean {
   const sessionSecret = process.env.SESSION_SECRET;
-  const adminPassword = process.env.ADMIN_SECRET_PASSWORD;
+  const adminPassword = configuredAdminPassword();
   if (!adminPasswordConfigurationReady() || !sessionSecret || !adminPassword) return false;
   if (isValidAdminSessionToken(cookieValue(req), sessionSecret, adminPassword)) return true;
 
@@ -128,7 +134,7 @@ export function hasAdminPasswordSession(req: Request): boolean {
 
 export function setAdminPasswordSessionCookie(req: Request, res: Response): void {
   const sessionSecret = process.env.SESSION_SECRET;
-  const adminPassword = process.env.ADMIN_SECRET_PASSWORD;
+  const adminPassword = configuredAdminPassword();
   if (!adminPasswordConfigurationReady() || !sessionSecret || !adminPassword) {
     throw new Error("Admin session signing is unavailable");
   }

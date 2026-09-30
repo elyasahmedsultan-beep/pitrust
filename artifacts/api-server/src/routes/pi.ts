@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { clerkClient } from "@clerk/express";
 import { requireSession, authenticatedUserId, isContractParticipant } from "../lib/session";
 import { findContract } from "../lib/escrow";
@@ -8,23 +8,31 @@ import {
   fixedPiUnits,
   linkedPiUid,
   piRequest,
-  piNetworkApiConfigured,
-  piNetworkRequest,
   savePaymentLedger,
   verifyIncomingPayment,
   type PiPayment,
 } from "../lib/pi";
 import {
-  ESCROW_SERVICE_DEPOSIT,
-  listEscrowServiceDeposits,
-  saveEscrowServiceDeposit,
-  verifyEscrowServiceDepositPayment,
-} from "../lib/escrowServiceDeposit";
+  type ListingAdOperation,
+  cancelListingAdPaymentIntent,
+  createListingAdPaymentIntent,
+  getListingAdPaymentIntent,
+  recordListingAdPayment,
+  verifyListingAdPayment,
+} from "../lib/listingAdPayment.ts";
 import { supabaseRequest } from "../lib/supabase";
+import { describePaymentFailure } from "../lib/paymentFailure.ts";
 import { currentPiNetwork } from "../lib/piA2u";
-import { configuredPiApiKey } from "../lib/piA2uConfig.ts";
+import { configuredPiNetworkApiKey } from "../lib/piA2uConfig.ts";
+import { canCancelPiPayment, hasVerifiedPiTransaction } from "../lib/piPaymentRecovery.ts";
 import { getPaymentFeeSettings } from "../lib/appSettings";
 import { isTestnetWalletHostAllowed } from "../lib/testnetWalletAccess";
+import {
+  captureVerifiedPiWalletAddressIfEmpty,
+  getPiPayoutIdentity,
+  hasValidPiPayoutIdentity,
+  verifiedPiPaymentFromAddress,
+} from "../lib/piWallet";
 import {
   createPiIframeSessionCredential,
   isPiIframeSessionAllowed,
@@ -36,6 +44,7 @@ import {
   createPiAppSessionCredential,
   hashPiAppSessionToken,
   parsePiAppSessionCookie,
+  piAppSessionClearCookies,
   piAppSessionSetCookie,
   PI_APP_SESSION_TTL_SECONDS,
 } from "../lib/piAppSession.ts";
@@ -58,8 +67,9 @@ import {
   GetPiStatusResponse,
   CreateMonthlyBadgePaymentIntentResponse,
   GetMonthlyBadgeStatusResponse,
-  CreateEscrowServiceDepositIntentResponse,
-  ListEscrowServiceDepositsResponse,
+  CreateListingAdPaymentIntentParams,
+  CreateListingAdPaymentIntentResponse,
+  CreateListingEditPaymentIntentBody,
   ApprovePiPaymentBody,
   ApprovePiPaymentResponse,
   CompletePiPaymentBody,
@@ -79,10 +89,90 @@ import {
 
 const router: IRouter = Router();
 
+async function captureVerifiedPaymentWallet(
+  req: Request,
+  piUid: string,
+  payment: PiPayment,
+): Promise<void> {
+  const address = verifiedPiPaymentFromAddress(payment);
+  if (!address) return;
+  try {
+    await captureVerifiedPiWalletAddressIfEmpty(piUid, address);
+  } catch (error) {
+    req.log.warn(
+      { errorType: error instanceof Error ? error.name : "unknown" },
+      "Could not save the wallet address from a verified Pi payment",
+    );
+  }
+}
+
 function errorStatus(error: unknown): number {
   return typeof error === "object" && error !== null && "status" in error
     ? Number((error as { status: number }).status)
     : 502;
+}
+
+function respondWithPaymentFailure(
+  req: Request,
+  res: Response,
+  error: unknown,
+  logMessage: string,
+): void {
+  const failure = describePaymentFailure(error);
+  req.log.error(
+    { err: error, failureProvider: failure.provider, failureCode: failure.code },
+    logMessage,
+  );
+  const requestId = (req as Request & { id?: string | number }).id;
+  res.status(failure.status).json({
+    error: failure.message,
+    code: failure.code,
+    ...(requestId === undefined ? {} : { requestId: String(requestId) }),
+  });
+}
+
+async function cancelPiPaymentOnProvider(paymentId: string, payment: PiPayment): Promise<PiPayment> {
+  assertPiPaymentCancellable(payment);
+  if (payment.status?.cancelled || payment.status?.user_cancelled) return payment;
+
+  let cancelError: unknown;
+  try {
+    await piRequest(`/payments/${encodeURIComponent(paymentId)}/cancel`, { method: "POST" });
+  } catch (error) {
+    cancelError = error;
+  }
+
+  let latest: PiPayment;
+  try {
+    latest = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+  } catch (error) {
+    throw cancelError ?? error;
+  }
+  assertPiPaymentCancellable(latest);
+  if (latest.status?.cancelled || latest.status?.user_cancelled) return latest;
+  if (cancelError) throw cancelError;
+  throw Object.assign(
+    new Error("Pi did not confirm cancellation; the payment remains pending"),
+    { status: 409, code: "PI_PAYMENT_CANCELLATION_UNCONFIRMED" },
+  );
+}
+
+function assertPiPaymentCancellable(payment: PiPayment): void {
+  if (canCancelPiPayment(payment)) return;
+  const verifiedOrCompleted =
+    hasVerifiedPiTransaction(payment) ||
+    payment.status?.developer_completed === true;
+  throw Object.assign(
+    new Error(
+      verifiedOrCompleted
+        ? "Pi has verified or completed this wallet transaction; it must be completed or reconciled instead of cancelled"
+        : "Pi did not explicitly confirm that this wallet transaction is unverified; it must be reconciled before cancellation",
+    ),
+    {
+      status: 409,
+      code: verifiedOrCompleted ? "PI_PAYMENT_NOT_CANCELLABLE" : "PI_PAYMENT_VERIFICATION_UNKNOWN",
+    },
+  );
 }
 
 async function verifyPiIdentity(accessToken: string): Promise<VerifiedPiIdentity> {
@@ -249,6 +339,7 @@ router.post("/pi/session", async (req, res): Promise<void> => {
       accountId: account.userId,
       piUid: identity.uid,
       username: piUsername,
+      existingAccount: account.existingAccount,
     }));
   } catch (error) {
     const status = errorStatus(error);
@@ -283,7 +374,7 @@ router.get("/pi/session", async (req, res): Promise<void> => {
 router.delete("/pi/session", async (req, res): Promise<void> => {
   res.set("Cache-Control", "no-store, private");
   const token = parsePiAppSessionCookie(req.get("cookie"));
-  res.set("Set-Cookie", piAppSessionSetCookie("", piAppSessionSecure(req), 0));
+  res.set("Set-Cookie", piAppSessionClearCookies(piAppSessionSecure(req)));
   try {
     if (token) {
       await supabaseRequest(
@@ -488,39 +579,108 @@ router.post("/pi/link", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/pi/escrow-service-deposits", async (req, res): Promise<void> => {
-  const userId = authenticatedUserId(req)!;
-  try {
-    const deposits = await listEscrowServiceDeposits(userId);
-    res.json(ListEscrowServiceDepositsResponse.parse(deposits));
-  } catch (error) {
-    req.log.error({ err: error }, "Could not list escrow service deposits");
-    res.status(errorStatus(error)).json({ error: "Escrow service deposits are unavailable" });
-  }
-});
-
-router.post("/pi/escrow-service-deposits/intent", async (req, res): Promise<void> => {
-  const userId = authenticatedUserId(req)!;
-  if (currentPiNetwork() !== "Pi Network") {
-    res.status(409).json({ error: "Escrow service deposits are available on Pi Mainnet only" });
+async function sendListingAdPaymentIntent(
+  req: Request,
+  res: Response,
+  listingId: string,
+  operation: ListingAdOperation,
+  updatePayload?: Record<string, unknown>,
+): Promise<void> {
+  const userId = authenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
     return;
   }
-  if (!piNetworkApiConfigured()) {
-    res.status(503).json({ error: "PI_NETWORK_API_KEY is not configured; no payment intent was issued" });
-    return;
-  }
-  try {
-    if (!await linkedPiUid(userId)) {
-      res.status(409).json({ error: "Link a verified Pi account before buying this deposit" });
+  if (operation === "edit" && updatePayload && Object.hasOwn(updatePayload, "amount")) {
+    const units = fixedPiUnits(updatePayload.amount as number);
+    if (units === null || units <= 0n || units > BigInt(Number.MAX_SAFE_INTEGER)) {
+      res.status(400).json({ error: "Listing price must be a positive Pi amount with up to 8 decimal places and a safe exact value" });
       return;
     }
-    // Fail closed when the additive payment-ledger migration has not been applied.
-    await listEscrowServiceDeposits(userId);
-    res.json(CreateEscrowServiceDepositIntentResponse.parse(ESCROW_SERVICE_DEPOSIT));
-  } catch (error) {
-    req.log.error({ err: error }, "Could not create escrow service deposit intent");
-    res.status(errorStatus(error)).json({ error: "Escrow service deposit checkout is unavailable" });
   }
+  const network = currentPiNetwork();
+  if (!network || !configuredPiNetworkApiKey()) {
+    res.status(503).json({ error: "Pi Platform API credentials for the selected network are not configured; no payment intent was issued" });
+    return;
+  }
+  try {
+    const piUid = await linkedPiUid(userId);
+    if (!piUid) {
+      res.status(409).json({ error: "Link a verified Pi account before publishing a listing" });
+      return;
+    }
+    if (operation === "publication") {
+      const identity = await getPiPayoutIdentity(userId);
+      if (!hasValidPiPayoutIdentity(identity) || identity.piUid !== piUid) {
+        res.status(409).json({
+          error: "Link the Pi account and save its valid Stellar G-address before publishing a listing",
+        });
+        return;
+      }
+    }
+    const intent = await createListingAdPaymentIntent({
+      id: randomUUID(),
+      listingId,
+      userId,
+      piUid,
+      network,
+      operation,
+      updatePayload,
+    });
+    res.json(CreateListingAdPaymentIntentResponse.parse({
+      listingId: intent.listing_id,
+      intentId: intent.id,
+      amount: Number(intent.amount),
+      memo: intent.memo,
+      metadata: {
+        type: "listing_ad",
+        listingId: intent.listing_id,
+        intentId: intent.id,
+        operation: intent.operation,
+      },
+    }));
+  } catch (error) {
+    req.log.error({ err: error }, "Could not create listing ad payment intent");
+    res.status(errorStatus(error)).json({ error: "Listing ad payment is unavailable" });
+  }
+}
+
+router.post("/pi/listings/:id/publication-payment-intent", requireSession, async (req, res): Promise<void> => {
+  const params = CreateListingAdPaymentIntentParams.safeParse({
+    id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
+  });
+  if (!params.success) {
+    res.status(400).json({ error: "A valid listing ID is required" });
+    return;
+  }
+  await sendListingAdPaymentIntent(req, res, params.data.id, "publication");
+});
+
+router.post("/pi/listings/:id/edit-payment-intent", requireSession, async (req, res): Promise<void> => {
+  const params = CreateListingAdPaymentIntentParams.safeParse({
+    id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
+  });
+  const body = CreateListingEditPaymentIntentBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: "A valid listing ID and at least one valid change are required" });
+    return;
+  }
+  if (!Object.keys(body.data).length) {
+    res.status(400).json({ error: "At least one listing change is required" });
+    return;
+  }
+  await sendListingAdPaymentIntent(req, res, params.data.id, "edit", body.data);
+});
+
+router.post("/pi/listings/:id/delete-payment-intent", requireSession, async (req, res): Promise<void> => {
+  const params = CreateListingAdPaymentIntentParams.safeParse({
+    id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
+  });
+  if (!params.success) {
+    res.status(400).json({ error: "A valid listing ID is required" });
+    return;
+  }
+  await sendListingAdPaymentIntent(req, res, params.data.id, "delete");
 });
 
 async function contractForPayment(payment: PiPayment) {
@@ -618,7 +778,7 @@ router.post("/badges/monthly/intent", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Link a verified Pi account and configure a valid Pi network first" });
       return;
     }
-    if (!configuredPiApiKey()) {
+    if (!configuredPiNetworkApiKey()) {
       res.status(503).json({ error: "Pi Platform API credentials for the selected network are not configured; no badge payment intent was issued" });
       return;
     }
@@ -662,8 +822,7 @@ router.post("/badges/monthly/intent", async (req, res): Promise<void> => {
       metadata: { badgeAuditId: audit.intent_id, billingMonth: audit.billing_month },
     }));
   } catch (error) {
-    req.log.error({ err: error }, "Could not reserve monthly badge audit");
-    res.status(errorStatus(error)).json({ error: "Could not reserve monthly badge audit" });
+    respondWithPaymentFailure(req, res, error, "Could not reserve monthly badge audit");
   }
 });
 
@@ -716,7 +875,7 @@ router.post("/contracts/:id/payment", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Contract amount cannot be safely represented by the Pi SDK" });
       return;
     }
-    if (!configuredPiApiKey()) {
+    if (!configuredPiNetworkApiKey()) {
       res.status(503).json({ error: "Pi Platform API credentials for the selected network are not configured; no payment intent was issued" });
       return;
     }
@@ -729,7 +888,7 @@ router.post("/contracts/:id/payment", async (req, res): Promise<void> => {
       amount: Number(contract.amount),
       transactionFeePercentage: feeSettings.transactionFeePercentage,
       memo: `Escrow funding ${contract.reference}`,
-      metadata: { contractId: contract.id },
+      metadata: { contractId: contract.id, type: "contract_funding" },
     }));
   } catch (error) {
     req.log.error({ err: error }, "Could not create Pi payment intent");
@@ -755,7 +914,7 @@ router.post("/contracts/:id/dispute-fee", async (req, res): Promise<void> => {
       res.status(409).json({ error: "A confirmed Pi contract payment is required before a dispute fee" });
       return;
     }
-    if (!configuredPiApiKey()) {
+    if (!configuredPiNetworkApiKey()) {
       res.status(503).json({ error: "Pi Platform API credentials for the selected network are not configured; no dispute-fee intent was issued" });
       return;
     }
@@ -791,40 +950,44 @@ router.post("/pi/payments/approve", async (req, res): Promise<void> => {
   }
   const { paymentId, purpose } = action.data;
   try {
-    const fetched = purpose === "escrow_service_deposit"
-      ? await piNetworkRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`)
-      : await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+    const fetched = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
     const userId = authenticatedUserId(req)!;
     const piUid = await linkedPiUid(userId);
     if (!piUid) {
       res.status(409).json({ error: "Link a verified Pi account before processing payments" });
       return;
     }
-    if (purpose === "escrow_service_deposit") {
-      verifyEscrowServiceDepositPayment(paymentId, fetched, piUid, currentPiNetwork());
-      await saveEscrowServiceDeposit({ paymentId, userId, piUid, status: "pending" });
+    if (purpose === "listing_ad") {
+      const intentId = typeof fetched.metadata?.intentId === "string" ? fetched.metadata.intentId : "";
+      if (!intentId) {
+        res.status(400).json({ error: "Listing payment is missing its server-issued intent" });
+        return;
+      }
+      const intent = await getListingAdPaymentIntent(intentId, userId, piUid);
+      verifyListingAdPayment(paymentId, fetched, intent, piUid, currentPiNetwork());
+      await recordListingAdPayment({ intentId, paymentId, userId, piUid, status: "pending" });
       if (fetched.status?.developer_approved) {
-        await saveEscrowServiceDeposit({ paymentId, userId, piUid, status: "approved" });
+        await recordListingAdPayment({ intentId, paymentId, userId, piUid, status: "approved" });
         res.json(ApprovePiPaymentResponse.parse({ approved: true, idempotent: true }));
         return;
       }
-      await piNetworkRequest(`/payments/${encodeURIComponent(paymentId)}/approve`, { method: "POST" });
-      const approved = await piNetworkRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
-      verifyEscrowServiceDepositPayment(paymentId, approved, piUid, currentPiNetwork());
+      await piRequest(`/payments/${encodeURIComponent(paymentId)}/approve`, { method: "POST" });
+      const approved = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+      verifyListingAdPayment(paymentId, approved, intent, piUid, currentPiNetwork());
       if (
         !approved.status?.developer_approved ||
         approved.status.cancelled ||
         approved.status.user_cancelled
       ) {
-        res.status(409).json({ error: "Pi did not confirm escrow service deposit approval" });
+        res.status(409).json({ error: "Pi did not confirm listing publication payment approval" });
         return;
       }
-      await saveEscrowServiceDeposit({ paymentId, userId, piUid, status: "approved" });
+      await recordListingAdPayment({ intentId, paymentId, userId, piUid, status: "approved" });
       res.json(ApprovePiPaymentResponse.parse({ approved: true }));
       return;
     }
-    if (fetched.metadata?.type === ESCROW_SERVICE_DEPOSIT.metadata.type) {
-      res.status(400).json({ error: "Escrow service deposits require the matching payment purpose" });
+    if (fetched.metadata?.type === "listing_ad") {
+      res.status(400).json({ error: "Listing publication payments require the matching payment purpose" });
       return;
     }
     if (fetched.metadata?.badgeAuditId != null) {
@@ -871,6 +1034,15 @@ router.post("/pi/payments/approve", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Contract is not accepting payment" });
       return;
     }
+    if (!feeType) {
+      await savePaymentLedger({
+        paymentId,
+        contractId: contract.id,
+        userId,
+        status: "approved",
+        amount: contract.amount,
+      });
+    }
     if (payment.status?.developer_approved) {
       res.json({ approved: true, idempotent: true });
       return;
@@ -885,18 +1057,19 @@ router.post("/pi/payments/approve", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Pi did not confirm developer approval" });
       return;
     }
-    await savePaymentLedger({
-      paymentId,
-      contractId: contract.id,
-      userId,
-      status: "approved",
-      amount: feeType ? disputeFee! : contract.amount,
-      feeType: feeType ?? null,
-    });
+    if (feeType) {
+      await savePaymentLedger({
+        paymentId,
+        contractId: contract.id,
+        userId,
+        status: "approved",
+        amount: disputeFee!,
+        feeType,
+      });
+    }
     res.json({ approved: true });
   } catch (error) {
-    req.log.error({ err: error }, "Pi payment approval failed");
-    res.status(errorStatus(error)).json({ error: error instanceof Error ? error.message : "Pi payment approval failed" });
+    respondWithPaymentFailure(req, res, error, "Pi payment approval failed");
   }
 });
 
@@ -909,9 +1082,7 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
   const { paymentId, purpose } = completion.data;
   const clientTxid = completion.data.txid;
   try {
-    const fetched = purpose === "escrow_service_deposit"
-      ? await piNetworkRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`)
-      : await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+    const fetched = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
     const userId = authenticatedUserId(req)!;
     const piUid = await linkedPiUid(userId);
     if (!piUid) {
@@ -923,15 +1094,21 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
       return;
     }
     const txid = clientTxid ?? fetched.transaction?.txid ?? undefined;
-    if (purpose === "escrow_service_deposit") {
-      verifyEscrowServiceDepositPayment(paymentId, fetched, piUid, currentPiNetwork());
-      await saveEscrowServiceDeposit({ paymentId, userId, piUid, status: "pending" });
+    if (purpose === "listing_ad") {
+      const intentId = typeof fetched.metadata?.intentId === "string" ? fetched.metadata.intentId : "";
+      if (!intentId) {
+        res.status(400).json({ error: "Listing payment is missing its server-issued intent" });
+        return;
+      }
+      const intent = await getListingAdPaymentIntent(intentId, userId, piUid);
+      verifyListingAdPayment(paymentId, fetched, intent, piUid, currentPiNetwork());
+      await recordListingAdPayment({ intentId, paymentId, userId, piUid, status: "pending" });
       if (!fetched.status?.developer_approved) {
-        res.status(409).json({ error: "Pi has not approved this escrow service deposit" });
+        res.status(409).json({ error: "Pi has not approved this listing publication payment" });
         return;
       }
       if (!txid) {
-        res.status(409).json({ error: "Pi has not submitted a transaction for this deposit yet" });
+        res.status(409).json({ error: "Pi has not submitted a transaction for this listing yet" });
         return;
       }
       const alreadyComplete =
@@ -940,36 +1117,45 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
         fetched.transaction?.verified &&
         fetched.transaction?.txid === txid;
       if (!alreadyComplete) {
-        await piNetworkRequest(`/payments/${encodeURIComponent(paymentId)}/complete`, {
+        await piRequest(`/payments/${encodeURIComponent(paymentId)}/complete`, {
           method: "POST",
           body: JSON.stringify({ txid }),
         });
       }
-      const completedDeposit = await piNetworkRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
-      verifyEscrowServiceDepositPayment(paymentId, completedDeposit, piUid, currentPiNetwork());
+      const completedPayment = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+      verifyListingAdPayment(paymentId, completedPayment, intent, piUid, currentPiNetwork());
       if (
-        !completedDeposit.status?.developer_approved ||
-        !completedDeposit.status?.transaction_verified ||
-        !completedDeposit.transaction?.verified ||
-        !completedDeposit.status?.developer_completed ||
-        completedDeposit.status.cancelled ||
-        completedDeposit.status.user_cancelled ||
-        completedDeposit.transaction.txid !== txid
+        !completedPayment.status?.developer_approved ||
+        !completedPayment.status?.transaction_verified ||
+        !completedPayment.transaction?.verified ||
+        !completedPayment.status?.developer_completed ||
+        completedPayment.status.cancelled ||
+        completedPayment.status.user_cancelled ||
+        completedPayment.transaction.txid !== txid
       ) {
-        res.status(409).json({ error: "Pi did not confirm every escrow service deposit payment state" });
+        res.status(409).json({ error: "Pi did not confirm every listing publication payment state" });
         return;
       }
-      await saveEscrowServiceDeposit({ paymentId, userId, piUid, status: "confirmed", txid });
+      try {
+        await recordListingAdPayment({ intentId, paymentId, userId, piUid, status: "confirmed", txid });
+      } catch (error) {
+        req.log.error(
+          { err: error, paymentId, intentId, txid },
+          "Pi confirmed the listing payment, but listing publication persistence failed",
+        );
+        throw error;
+      }
+      await captureVerifiedPaymentWallet(req, piUid, completedPayment);
       res.json(CompletePiPaymentResponse.parse({
         funded: false,
         confirmed: true,
         idempotent: alreadyComplete,
-        productName: ESCROW_SERVICE_DEPOSIT.productName,
+        productName: "Listing Publication Fee",
       }));
       return;
     }
-    if (fetched.metadata?.type === ESCROW_SERVICE_DEPOSIT.metadata.type) {
-      res.status(400).json({ error: "Escrow service deposits require the matching payment purpose" });
+    if (fetched.metadata?.type === "listing_ad") {
+      res.status(400).json({ error: "Listing publication payments require the matching payment purpose" });
       return;
     }
     if (!txid) {
@@ -1008,7 +1194,16 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
         res.status(409).json({ error: "Pi did not confirm every monthly badge payment state" });
         return;
       }
-      await saveMonthlyBadgePayment(audit, userId, paymentId, "confirmed", txid);
+      try {
+        await saveMonthlyBadgePayment(audit, userId, paymentId, "confirmed", txid);
+      } catch (error) {
+        req.log.error(
+          { err: error, paymentId, badgeAuditId: completedBadgePayment.metadata?.badgeAuditId, txid },
+          "Pi confirmed the monthly badge payment, but badge persistence failed",
+        );
+        throw error;
+      }
+      await captureVerifiedPaymentWallet(req, piUid, completedBadgePayment);
       res.json({ confirmed: true, billingMonth: audit.billing_month });
       return;
     }
@@ -1036,6 +1231,15 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
       payment.status?.transaction_verified &&
       payment.transaction?.verified &&
       payment.transaction?.txid === txid;
+    if (
+      !feeType &&
+      !alreadyComplete &&
+      contract.status !== "awaiting_funding" &&
+      contract.status !== "funded"
+    ) {
+      res.status(409).json({ error: "Contract is not accepting payment completion" });
+      return;
+    }
     if (!alreadyComplete && !payment.status?.developer_approved) {
       res.status(409).json({ error: "Pi has not approved this payment" });
       return;
@@ -1062,38 +1266,57 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
       res.status(409).json({ error: "Pi transaction verification did not match txid" });
       return;
     }
-    await savePaymentLedger({
-      paymentId,
-      contractId: contract.id,
-      userId,
-      status: feeType ? "fee_confirmed" : "confirmed",
-      amount: feeType ? disputeFee! : contract.amount,
-      txid,
-      feeType: feeType ?? null,
-    });
+    try {
+      await savePaymentLedger({
+        paymentId,
+        contractId: contract.id,
+        userId,
+        status: feeType ? "fee_confirmed" : "confirmed",
+        amount: feeType ? disputeFee! : contract.amount,
+        txid,
+        feeType: feeType ?? null,
+      });
+    } catch (error) {
+      req.log.error(
+        { err: error, paymentId, contractId: contract.id, feeType: feeType ?? null, txid },
+        "Pi confirmed the payment, but payment-ledger persistence failed",
+      );
+      throw error;
+    }
+    await captureVerifiedPaymentWallet(req, piUid, verified);
     if (feeType) {
       res.json({ funded: contract.status === "funded", idempotent: false });
       return;
     }
     if (contract.status === "awaiting_funding") {
-      const updated = await supabaseRequest<Array<{ id: string }>>(
-        `escrow_contracts?id=eq.${encodeURIComponent(contract.id)}&status=eq.awaiting_funding&buyer_id=eq.${encodeURIComponent(userId)}`,
-        {
-          method: "PATCH",
-          headers: { Prefer: "return=representation" },
-          body: JSON.stringify({
-            status: "funded",
-            next_action: "Mark delivery in progress",
-            updated_at: new Date().toISOString(),
-          }),
-        },
-      );
-      if (!updated.length) {
-        const latest = await findContract(contract.id);
-        if (latest?.status !== "funded") {
-          res.status(409).json({ error: "Payment confirmed by Pi, but funding state update was not applied" });
-          return;
+      try {
+        const updated = await supabaseRequest<Array<{ id: string }>>(
+          `escrow_contracts?id=eq.${encodeURIComponent(contract.id)}&status=eq.awaiting_funding&buyer_id=eq.${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify({
+              status: "funded",
+              next_action: "Mark delivery in progress",
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        );
+        if (!updated.length) {
+          const latest = await findContract(contract.id);
+          if (latest?.status !== "funded") {
+            throw Object.assign(
+              new Error("Pi confirmed payment, but contract funding state update was not applied"),
+              { status: 409, provider: "supabase", code: "PI_FUNDING_STATE_UPDATE_FAILED" },
+            );
+          }
         }
+      } catch (error) {
+        req.log.error(
+          { err: error, paymentId, contractId: contract.id, txid },
+          "Pi confirmed contract funding, but contract-state persistence failed",
+        );
+        throw error;
       }
     } else if (contract.status !== "funded") {
       res.status(409).json({ error: "Contract status changed before funding confirmation" });
@@ -1101,8 +1324,96 @@ router.post("/pi/payments/complete", async (req, res): Promise<void> => {
     }
     res.json({ funded: true, idempotent: alreadyComplete });
   } catch (error) {
-    req.log.error({ err: error }, "Pi payment completion failed");
-    res.status(errorStatus(error)).json({ error: error instanceof Error ? error.message : "Pi payment completion failed" });
+    respondWithPaymentFailure(req, res, error, "Pi payment completion failed");
+  }
+});
+
+router.post("/pi/payments/cancel", async (req, res): Promise<void> => {
+  const action = ApprovePiPaymentBody.safeParse(req.body);
+  if (!action.success || !action.data.purpose) {
+    res.status(400).json({ error: "A payment purpose is required to release this intent" });
+    return;
+  }
+  const { paymentId, purpose } = action.data;
+  try {
+    let payment = await piRequest<PiPayment>(`/payments/${encodeURIComponent(paymentId)}`);
+    const userId = authenticatedUserId(req)!;
+    const piUid = await linkedPiUid(userId);
+    if (!piUid) {
+      res.status(409).json({ error: "Link a verified Pi account before processing payments" });
+      return;
+    }
+    assertPiPaymentCancellable(payment);
+
+    if (purpose === "contract_funding") {
+      if (payment.metadata?.type !== "contract_funding") {
+        res.status(400).json({ error: "Funding cancellation purpose does not match Pi metadata" });
+        return;
+      }
+      const contract = await contractForPayment(payment);
+      if (!contract || contract.buyer_id !== userId) {
+        res.status(404).json({ error: "Funding contract not found" });
+        return;
+      }
+      await verifyIncomingPayment(paymentId, contract, piUid, undefined, undefined, true);
+      payment = await cancelPiPaymentOnProvider(paymentId, payment);
+      await verifyIncomingPayment(paymentId, contract, piUid, undefined, undefined, true);
+      const cancelled = await supabaseRequest<boolean[]>("rpc/cancel_verified_contract_funding_payment", {
+        method: "POST",
+        body: JSON.stringify({
+          p_pi_payment_id: paymentId,
+          p_contract_id: contract.id,
+          p_user_id: userId,
+        }),
+      });
+      if (cancelled[0] !== true) {
+        res.status(409).json({ error: "Funding payment cancellation could not be recorded" });
+        return;
+      }
+      const ledgerRows = await supabaseRequest<Array<{ status: string }>>(
+        `escrow_payment_ledger?pi_payment_id=eq.${encodeURIComponent(paymentId)}&contract_id=eq.${encodeURIComponent(contract.id)}&user_id=eq.${encodeURIComponent(userId)}&fee_type=is.null&select=status&limit=1`,
+      );
+      if (ledgerRows.some((row) => row.status !== "cancelled")) {
+        throw Object.assign(
+          new Error("Pi confirmed cancellation, but the funding ledger did not release this payment"),
+          { status: 409, provider: "supabase", code: "PI_CANCELLATION_LEDGER_NOT_RELEASED" },
+        );
+      }
+      if (!ledgerRows.length) {
+        req.log.warn(
+          { paymentId, contractId: contract.id },
+          "Pi funding payment was cancelled without a matching local ledger reservation",
+        );
+      }
+      res.json({ cancelled: true });
+      return;
+    }
+
+    if (purpose !== "listing_ad" || payment.metadata?.type !== "listing_ad") {
+      res.status(400).json({ error: "Payment purpose does not match its Pi metadata" });
+      return;
+    }
+    const intentId = typeof payment.metadata?.intentId === "string" ? payment.metadata.intentId : "";
+    if (!intentId) {
+      res.status(400).json({ error: "Cancelled payment is missing its server-issued intent" });
+      return;
+    }
+    const intent = await getListingAdPaymentIntent(intentId, userId, piUid);
+    verifyListingAdPayment(paymentId, payment, intent, piUid, currentPiNetwork(), true);
+    payment = await cancelPiPaymentOnProvider(paymentId, payment);
+    verifyListingAdPayment(paymentId, payment, intent, piUid, currentPiNetwork(), true);
+    try {
+      await cancelListingAdPaymentIntent(intentId, paymentId, userId, piUid);
+    } catch (error) {
+      req.log.error(
+        { err: error, paymentId, intentId },
+        "Pi payment was cancelled, but listing payment-intent release failed",
+      );
+      throw error;
+    }
+    res.json({ cancelled: true });
+  } catch (error) {
+    respondWithPaymentFailure(req, res, error, "Pi payment cancellation or intent release failed");
   }
 });
 

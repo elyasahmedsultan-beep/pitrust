@@ -36,6 +36,7 @@ import type {
   ChatMessage,
   ChatMessageInput,
   Contract,
+  ContractCancellation,
   ContractInput,
   DashboardSummary,
   Delivery,
@@ -44,8 +45,6 @@ import type {
   DisputeInput,
   DisputeResolutionInput,
   Error,
-  EscrowServiceDeposit,
-  EscrowServiceDepositIntent,
   EvidenceConfirmation,
   EvidenceConfirmationInput,
   EvidenceList,
@@ -54,11 +53,17 @@ import type {
   HealthStatus,
   ListPublicChatMessagesParams,
   Listing,
+  ListingAdFee,
+  ListingAdFeeUpdate,
+  ListingAdPaymentIntent,
   ListingContractInput,
+  ListingEditInput,
   ListingInput,
   MarketStats,
   MonthlyBadgeIntent,
   MonthlyBadgeStatus,
+  Notification,
+  OwnedListing,
   PaymentIntent,
   PayoutPending,
   PiAccountLink,
@@ -74,6 +79,7 @@ import type {
   PiIframeSession,
   PiIframeSessionInput,
   PiPaymentAction,
+  PiPaymentCancellation,
   PiPaymentCompletion,
   PiSessionDeletion,
   Profile,
@@ -91,6 +97,7 @@ import type {
   Signature,
   SignatureInput,
   StatusUpdate,
+  TestnetEscrowRefund,
   TestnetFaucetClaim,
   TestnetFaucetClaimBlocked,
   TestnetWallet,
@@ -609,6 +616,154 @@ export const useUpdateContractStatus = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getUpdateContractStatusMutationOptions(options));
+    }
+
+export const getCancelUnfundedContractUrl = (id: string,) => {
+
+
+
+
+  return `/api/contracts/${id}/cancel`
+}
+
+/**
+ * @summary Cancel an unfunded contract before any funding payment is active
+ */
+export const cancelUnfundedContract = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ContractCancellation> => {
+
+  return customFetch<ContractCancellation>(getCancelUnfundedContractUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelUnfundedContractMutationKey = () => ['cancelUnfundedContract'] as const;
+
+export const getCancelUnfundedContractMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelUnfundedContract>>, TError,CancelUnfundedContractMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelUnfundedContract>>, TError,CancelUnfundedContractMutationVariables, TContext> => {
+
+const mutationKey = getCancelUnfundedContractMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelUnfundedContract>>, CancelUnfundedContractMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelUnfundedContract(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelUnfundedContractMutationResult = NonNullable<Awaited<ReturnType<typeof cancelUnfundedContract>>>
+
+    export type CancelUnfundedContractMutationError = ErrorType<Error>
+    export type CancelUnfundedContractMutationVariables = {id: string}
+
+    /**
+ * @summary Cancel an unfunded contract before any funding payment is active
+ */
+export const useCancelUnfundedContract = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelUnfundedContract>>, TError,CancelUnfundedContractMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelUnfundedContract>>,
+        TError,
+        CancelUnfundedContractMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCancelUnfundedContractMutationOptions(options));
+    }
+
+export const getRefundTestnetContractToWalletUrl = (id: string,) => {
+
+
+
+
+  return `/api/contracts/${id}/refund-wallet`
+}
+
+/**
+ * @summary Refund a funded Testnet contract to the buyer's internal wallet
+ */
+export const refundTestnetContractToWallet = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<TestnetEscrowRefund> => {
+
+  return customFetch<TestnetEscrowRefund>(getRefundTestnetContractToWalletUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefundTestnetContractToWalletMutationKey = () => ['refundTestnetContractToWallet'] as const;
+
+export const getRefundTestnetContractToWalletMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refundTestnetContractToWallet>>, TError,RefundTestnetContractToWalletMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refundTestnetContractToWallet>>, TError,RefundTestnetContractToWalletMutationVariables, TContext> => {
+
+const mutationKey = getRefundTestnetContractToWalletMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refundTestnetContractToWallet>>, RefundTestnetContractToWalletMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  refundTestnetContractToWallet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefundTestnetContractToWalletMutationResult = NonNullable<Awaited<ReturnType<typeof refundTestnetContractToWallet>>>
+
+    export type RefundTestnetContractToWalletMutationError = ErrorType<Error>
+    export type RefundTestnetContractToWalletMutationVariables = {id: string}
+
+    /**
+ * @summary Refund a funded Testnet contract to the buyer's internal wallet
+ */
+export const useRefundTestnetContractToWallet = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refundTestnetContractToWallet>>, TError,RefundTestnetContractToWalletMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refundTestnetContractToWallet>>,
+        TError,
+        RefundTestnetContractToWalletMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRefundTestnetContractToWalletMutationOptions(options));
     }
 
 export const getFundContractUrl = (id: string,) => {
@@ -1134,6 +1289,94 @@ export function useGetAdminAccess<TData = Awaited<ReturnType<typeof getAdminAcce
 
 
 
+
+export const getUpdateAdminListingAdFeeUrl = () => {
+
+
+
+
+  return `/api/admin/listing-ad-fee`
+}
+
+/**
+ * @summary Update the listing publication fee using an admin password session
+ */
+export const updateAdminListingAdFee = async (listingAdFeeUpdate: ListingAdFeeUpdate, options?: Parameters<typeof customFetch>[1]): Promise<ListingAdFee> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ListingAdFee>(getUpdateAdminListingAdFeeUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(listingAdFeeUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminListingAdFeeMutationKey = () => ['updateAdminListingAdFee'] as const;
+
+export const getUpdateAdminListingAdFeeMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminListingAdFee>>, TError,UpdateAdminListingAdFeeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminListingAdFee>>, TError,UpdateAdminListingAdFeeMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAdminListingAdFeeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminListingAdFee>>, UpdateAdminListingAdFeeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateAdminListingAdFee(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminListingAdFeeMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminListingAdFee>>>
+    export type UpdateAdminListingAdFeeMutationBody = BodyType<ListingAdFeeUpdate>
+    export type UpdateAdminListingAdFeeMutationError = ErrorType<Error>
+    export type UpdateAdminListingAdFeeMutationVariables = {data: BodyType<ListingAdFeeUpdate>}
+
+    /**
+ * @summary Update the listing publication fee using an admin password session
+ */
+export const useUpdateAdminListingAdFee = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminListingAdFee>>, TError,UpdateAdminListingAdFeeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminListingAdFee>>,
+        TError,
+        UpdateAdminListingAdFeeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAdminListingAdFeeMutationOptions(options));
+    }
 
 export const getCreateAdminSessionUrl = () => {
 
@@ -2255,94 +2498,20 @@ export function useGetMonthlyBadgeStatus<TData = Awaited<ReturnType<typeof getMo
 
 
 
-export const getCreateEscrowServiceDepositIntentUrl = () => {
+export const getGetListingAdFeeUrl = () => {
 
 
 
 
-  return `/api/pi/escrow-service-deposits/intent`
+  return `/api/listing-ad-fee`
 }
 
 /**
- * @summary Get the fixed Pi payment parameters for the escrow service deposit
+ * @summary Read the current system-controlled listing publication fee
  */
-export const createEscrowServiceDepositIntent = async ( options?: Parameters<typeof customFetch>[1]): Promise<EscrowServiceDepositIntent> => {
+export const getListingAdFee = async ( options?: Parameters<typeof customFetch>[1]): Promise<ListingAdFee> => {
 
-  return customFetch<EscrowServiceDepositIntent>(getCreateEscrowServiceDepositIntentUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getCreateEscrowServiceDepositIntentMutationKey = () => ['createEscrowServiceDepositIntent'] as const;
-
-export const getCreateEscrowServiceDepositIntentMutationOptions = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>, TError,void, TContext> => {
-
-const mutationKey = getCreateEscrowServiceDepositIntentMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>, void> = () => {
-
-
-          return  createEscrowServiceDepositIntent(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateEscrowServiceDepositIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>>
-
-    export type CreateEscrowServiceDepositIntentMutationError = ErrorType<Error>
-
-
-    /**
- * @summary Get the fixed Pi payment parameters for the escrow service deposit
- */
-export const useCreateEscrowServiceDepositIntent = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof createEscrowServiceDepositIntent>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getCreateEscrowServiceDepositIntentMutationOptions(options));
-    }
-
-export const getListEscrowServiceDepositsUrl = () => {
-
-
-
-
-  return `/api/pi/escrow-service-deposits`
-}
-
-/**
- * @summary List the current user's confirmed and pending escrow service deposits
- */
-export const listEscrowServiceDeposits = async ( options?: Parameters<typeof customFetch>[1]): Promise<EscrowServiceDeposit[]> => {
-
-  return customFetch<EscrowServiceDeposit[]>(getListEscrowServiceDepositsUrl(),
+  return customFetch<ListingAdFee>(getGetListingAdFeeUrl(),
   {
     ...options,
     method: 'GET'
@@ -2355,45 +2524,45 @@ export const listEscrowServiceDeposits = async ( options?: Parameters<typeof cus
 
 
 
-export const getListEscrowServiceDepositsQueryKey = () => {
+export const getGetListingAdFeeQueryKey = () => {
     return [
-    `/api/pi/escrow-service-deposits`
+    `/api/listing-ad-fee`
     ] as const;
     }
 
 
-export const getListEscrowServiceDepositsQueryOptions = <TData = Awaited<ReturnType<typeof listEscrowServiceDeposits>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEscrowServiceDeposits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetListingAdFeeQueryOptions = <TData = Awaited<ReturnType<typeof getListingAdFee>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingAdFee>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListEscrowServiceDepositsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetListingAdFeeQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEscrowServiceDeposits>>> = ({ signal }) => listEscrowServiceDeposits({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getListingAdFee>>> = ({ signal }) => getListingAdFee({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEscrowServiceDeposits>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getListingAdFee>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type ListEscrowServiceDepositsQueryResult = NonNullable<Awaited<ReturnType<typeof listEscrowServiceDeposits>>>
-export type ListEscrowServiceDepositsQueryError = ErrorType<unknown>
+export type GetListingAdFeeQueryResult = NonNullable<Awaited<ReturnType<typeof getListingAdFee>>>
+export type GetListingAdFeeQueryError = ErrorType<Error>
 
 
 /**
- * @summary List the current user's confirmed and pending escrow service deposits
+ * @summary Read the current system-controlled listing publication fee
  */
 
-export function useListEscrowServiceDeposits<TData = Awaited<ReturnType<typeof listEscrowServiceDeposits>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEscrowServiceDeposits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetListingAdFee<TData = Awaited<ReturnType<typeof getListingAdFee>>, TError = ErrorType<Error>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingAdFee>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListEscrowServiceDepositsQueryOptions(options)
+  const queryOptions = getGetListingAdFeeQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2405,6 +2574,243 @@ export function useListEscrowServiceDeposits<TData = Awaited<ReturnType<typeof l
 
 
 
+
+export const getCreateListingAdPaymentIntentUrl = (id: string,) => {
+
+
+
+
+  return `/api/pi/listings/${id}/publication-payment-intent`
+}
+
+/**
+ * @summary Create or resume a Pi payment to publish an owned listing
+ */
+export const createListingAdPaymentIntent = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ListingAdPaymentIntent> => {
+
+  return customFetch<ListingAdPaymentIntent>(getCreateListingAdPaymentIntentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreateListingAdPaymentIntentMutationKey = () => ['createListingAdPaymentIntent'] as const;
+
+export const getCreateListingAdPaymentIntentMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingAdPaymentIntent>>, TError,CreateListingAdPaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createListingAdPaymentIntent>>, TError,CreateListingAdPaymentIntentMutationVariables, TContext> => {
+
+const mutationKey = getCreateListingAdPaymentIntentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createListingAdPaymentIntent>>, CreateListingAdPaymentIntentMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  createListingAdPaymentIntent(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateListingAdPaymentIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createListingAdPaymentIntent>>>
+
+    export type CreateListingAdPaymentIntentMutationError = ErrorType<Error>
+    export type CreateListingAdPaymentIntentMutationVariables = {id: string}
+
+    /**
+ * @summary Create or resume a Pi payment to publish an owned listing
+ */
+export const useCreateListingAdPaymentIntent = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingAdPaymentIntent>>, TError,CreateListingAdPaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createListingAdPaymentIntent>>,
+        TError,
+        CreateListingAdPaymentIntentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateListingAdPaymentIntentMutationOptions(options));
+    }
+
+export const getCreateListingEditPaymentIntentUrl = (id: string,) => {
+
+
+
+
+  return `/api/pi/listings/${id}/edit-payment-intent`
+}
+
+/**
+ * @summary Create a Pi payment intent for an owned listing edit
+ */
+export const createListingEditPaymentIntent = async (id: string,
+    listingEditInput: ListingEditInput, options?: Parameters<typeof customFetch>[1]): Promise<ListingAdPaymentIntent> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ListingAdPaymentIntent>(getCreateListingEditPaymentIntentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(listingEditInput)
+  }
+);}
+
+
+
+
+
+export const getCreateListingEditPaymentIntentMutationKey = () => ['createListingEditPaymentIntent'] as const;
+
+export const getCreateListingEditPaymentIntentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingEditPaymentIntent>>, TError,CreateListingEditPaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createListingEditPaymentIntent>>, TError,CreateListingEditPaymentIntentMutationVariables, TContext> => {
+
+const mutationKey = getCreateListingEditPaymentIntentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createListingEditPaymentIntent>>, CreateListingEditPaymentIntentMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createListingEditPaymentIntent(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateListingEditPaymentIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createListingEditPaymentIntent>>>
+    export type CreateListingEditPaymentIntentMutationBody = BodyType<ListingEditInput>
+    export type CreateListingEditPaymentIntentMutationError = ErrorType<unknown>
+    export type CreateListingEditPaymentIntentMutationVariables = {id: string;data: BodyType<ListingEditInput>}
+
+    /**
+ * @summary Create a Pi payment intent for an owned listing edit
+ */
+export const useCreateListingEditPaymentIntent = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingEditPaymentIntent>>, TError,CreateListingEditPaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createListingEditPaymentIntent>>,
+        TError,
+        CreateListingEditPaymentIntentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateListingEditPaymentIntentMutationOptions(options));
+    }
+
+export const getCreateListingDeletePaymentIntentUrl = (id: string,) => {
+
+
+
+
+  return `/api/pi/listings/${id}/delete-payment-intent`
+}
+
+/**
+ * @summary Create a Pi payment intent to deactivate an owned listing
+ */
+export const createListingDeletePaymentIntent = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ListingAdPaymentIntent> => {
+
+  return customFetch<ListingAdPaymentIntent>(getCreateListingDeletePaymentIntentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreateListingDeletePaymentIntentMutationKey = () => ['createListingDeletePaymentIntent'] as const;
+
+export const getCreateListingDeletePaymentIntentMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingDeletePaymentIntent>>, TError,CreateListingDeletePaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createListingDeletePaymentIntent>>, TError,CreateListingDeletePaymentIntentMutationVariables, TContext> => {
+
+const mutationKey = getCreateListingDeletePaymentIntentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createListingDeletePaymentIntent>>, CreateListingDeletePaymentIntentMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  createListingDeletePaymentIntent(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateListingDeletePaymentIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createListingDeletePaymentIntent>>>
+
+    export type CreateListingDeletePaymentIntentMutationError = ErrorType<Error>
+    export type CreateListingDeletePaymentIntentMutationVariables = {id: string}
+
+    /**
+ * @summary Create a Pi payment intent to deactivate an owned listing
+ */
+export const useCreateListingDeletePaymentIntent = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createListingDeletePaymentIntent>>, TError,CreateListingDeletePaymentIntentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createListingDeletePaymentIntent>>,
+        TError,
+        CreateListingDeletePaymentIntentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateListingDeletePaymentIntentMutationOptions(options));
+    }
 
 export const getCreateContractPaymentIntentUrl = (id: string,) => {
 
@@ -2796,6 +3202,157 @@ export function useListActivity<TData = Awaited<ReturnType<typeof listActivity>>
 
 
 
+
+export const getListNotificationsUrl = () => {
+
+
+
+
+  return `/api/notifications`
+}
+
+/**
+ * @summary List in-app notifications for the authenticated user
+ */
+export const listNotifications = async ( options?: Parameters<typeof customFetch>[1]): Promise<Notification[]> => {
+
+  return customFetch<Notification[]>(getListNotificationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListNotificationsQueryKey = () => {
+    return [
+    `/api/notifications`
+    ] as const;
+    }
+
+
+export const getListNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNotificationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotifications>>> = ({ signal }) => listNotifications({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof listNotifications>>>
+export type ListNotificationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List in-app notifications for the authenticated user
+ */
+
+export function useListNotifications<TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListNotificationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMarkNotificationReadUrl = (id: string,) => {
+
+
+
+
+  return `/api/notifications/${id}/read`
+}
+
+/**
+ * @summary Mark one notification as read
+ */
+export const markNotificationRead = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Notification> => {
+
+  return customFetch<Notification>(getMarkNotificationReadUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+
+export const getMarkNotificationReadMutationKey = () => ['markNotificationRead'] as const;
+
+export const getMarkNotificationReadMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,MarkNotificationReadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,MarkNotificationReadMutationVariables, TContext> => {
+
+const mutationKey = getMarkNotificationReadMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markNotificationRead>>, MarkNotificationReadMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  markNotificationRead(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkNotificationReadMutationResult = NonNullable<Awaited<ReturnType<typeof markNotificationRead>>>
+
+    export type MarkNotificationReadMutationError = ErrorType<Error>
+    export type MarkNotificationReadMutationVariables = {id: string}
+
+    /**
+ * @summary Mark one notification as read
+ */
+export const useMarkNotificationRead = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,MarkNotificationReadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markNotificationRead>>,
+        TError,
+        MarkNotificationReadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMarkNotificationReadMutationOptions(options));
+    }
 
 export const getApprovePiPaymentUrl = () => {
 
@@ -3704,6 +4261,94 @@ export const useCompletePiPayment = <TError = ErrorType<unknown>,
       return useMutation(getCompletePiPaymentMutationOptions(options));
     }
 
+export const getCancelPiPaymentUrl = () => {
+
+
+
+
+  return `/api/pi/payments/cancel`
+}
+
+/**
+ * @summary Verify a Pi cancellation and release its server-side payment intent
+ */
+export const cancelPiPayment = async (piPaymentAction: PiPaymentAction, options?: Parameters<typeof customFetch>[1]): Promise<PiPaymentCancellation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PiPaymentCancellation>(getCancelPiPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(piPaymentAction)
+  }
+);}
+
+
+
+
+
+export const getCancelPiPaymentMutationKey = () => ['cancelPiPayment'] as const;
+
+export const getCancelPiPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPiPayment>>, TError,CancelPiPaymentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelPiPayment>>, TError,CancelPiPaymentMutationVariables, TContext> => {
+
+const mutationKey = getCancelPiPaymentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelPiPayment>>, CancelPiPaymentMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  cancelPiPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelPiPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof cancelPiPayment>>>
+    export type CancelPiPaymentMutationBody = BodyType<PiPaymentAction>
+    export type CancelPiPaymentMutationError = ErrorType<unknown>
+    export type CancelPiPaymentMutationVariables = {data: BodyType<PiPaymentAction>}
+
+    /**
+ * @summary Verify a Pi cancellation and release its server-side payment intent
+ */
+export const useCancelPiPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPiPayment>>, TError,CancelPiPaymentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelPiPayment>>,
+        TError,
+        CancelPiPaymentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCancelPiPaymentMutationOptions(options));
+    }
+
 export const getSearchListingsUrl = (params?: SearchListingsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -3875,6 +4520,83 @@ export const useCreateListing = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateListingMutationOptions(options));
     }
+
+export const getGetMyListingsUrl = () => {
+
+
+
+
+  return `/api/listings/mine`
+}
+
+/**
+ * @summary List active and inactive listings owned by the authenticated user
+ */
+export const getMyListings = async ( options?: Parameters<typeof customFetch>[1]): Promise<OwnedListing[]> => {
+
+  return customFetch<OwnedListing[]>(getGetMyListingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyListingsQueryKey = () => {
+    return [
+    `/api/listings/mine`
+    ] as const;
+    }
+
+
+export const getGetMyListingsQueryOptions = <TData = Awaited<ReturnType<typeof getMyListings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyListings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyListingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyListings>>> = ({ signal }) => getMyListings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyListings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyListingsQueryResult = NonNullable<Awaited<ReturnType<typeof getMyListings>>>
+export type GetMyListingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List active and inactive listings owned by the authenticated user
+ */
+
+export function useGetMyListings<TData = Awaited<ReturnType<typeof getMyListings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyListings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyListingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getCreateListingContractUrl = (id: string,) => {
 
@@ -4383,7 +5105,7 @@ export const getListContractMessagesUrl = (id: string,) => {
 }
 
 /**
- * @summary Poll participant-only contract messages
+ * @summary Poll participant-only contract messages and translate for the viewer
  */
 export const listContractMessages = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ChatMessage[]> => {
 
@@ -4430,7 +5152,7 @@ export type ListContractMessagesQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Poll participant-only contract messages
+ * @summary Poll participant-only contract messages and translate for the viewer
  */
 
 export function useListContractMessages<TData = Awaited<ReturnType<typeof listContractMessages>>, TError = ErrorType<unknown>>(
@@ -4549,7 +5271,7 @@ export const getListPublicChatRoomsUrl = () => {
 }
 
 /**
- * @summary List active public chat rooms for authenticated members
+ * @summary List active public chat rooms without authentication
  */
 export const listPublicChatRooms = async ( options?: Parameters<typeof customFetch>[1]): Promise<PublicChatRoom[]> => {
 
@@ -4573,7 +5295,7 @@ export const getListPublicChatRoomsQueryKey = () => {
     }
 
 
-export const getListPublicChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof listPublicChatRooms>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPublicChatRoomsQueryOptions = <TData = Awaited<ReturnType<typeof listPublicChatRooms>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -4592,19 +5314,96 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ListPublicChatRoomsQueryResult = NonNullable<Awaited<ReturnType<typeof listPublicChatRooms>>>
-export type ListPublicChatRoomsQueryError = ErrorType<void>
+export type ListPublicChatRoomsQueryError = ErrorType<Error>
 
 
 /**
- * @summary List active public chat rooms for authenticated members
+ * @summary List active public chat rooms without authentication
  */
 
-export function useListPublicChatRooms<TData = Awaited<ReturnType<typeof listPublicChatRooms>>, TError = ErrorType<void>>(
+export function useListPublicChatRooms<TData = Awaited<ReturnType<typeof listPublicChatRooms>>, TError = ErrorType<Error>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListPublicChatRoomsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPublicChatRoomsAliasUrl = () => {
+
+
+
+
+  return `/api/rooms`
+}
+
+/**
+ * @summary List active public chat rooms without authentication (canonical alias)
+ */
+export const listPublicChatRoomsAlias = async ( options?: Parameters<typeof customFetch>[1]): Promise<PublicChatRoom[]> => {
+
+  return customFetch<PublicChatRoom[]>(getListPublicChatRoomsAliasUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPublicChatRoomsAliasQueryKey = () => {
+    return [
+    `/api/rooms`
+    ] as const;
+    }
+
+
+export const getListPublicChatRoomsAliasQueryOptions = <TData = Awaited<ReturnType<typeof listPublicChatRoomsAlias>>, TError = ErrorType<Error>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRoomsAlias>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPublicChatRoomsAliasQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublicChatRoomsAlias>>> = ({ signal }) => listPublicChatRoomsAlias({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRoomsAlias>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPublicChatRoomsAliasQueryResult = NonNullable<Awaited<ReturnType<typeof listPublicChatRoomsAlias>>>
+export type ListPublicChatRoomsAliasQueryError = ErrorType<Error>
+
+
+/**
+ * @summary List active public chat rooms without authentication (canonical alias)
+ */
+
+export function useListPublicChatRoomsAlias<TData = Awaited<ReturnType<typeof listPublicChatRoomsAlias>>, TError = ErrorType<Error>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublicChatRoomsAlias>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPublicChatRoomsAliasQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ADMIN_SESSION_TTL_MS,
+  configuredAdminPassword,
   createAdminSessionToken,
   isValidAdminSessionToken,
   verifyAdminPassword,
@@ -9,6 +10,11 @@ import {
 
 const SESSION_SECRET = "test-session-secret-with-adequate-entropy";
 const PASSWORD = "a-test-admin-password-long-enough";
+
+test("admin password is read from ADMIN_PASSWORD", () => {
+  assert.equal(configuredAdminPassword({ ADMIN_PASSWORD: "configured-password" }), "configured-password");
+  assert.equal(configuredAdminPassword({}), null);
+});
 
 test("admin password comparison is exact and rejects short configured secrets", () => {
   assert.equal(verifyAdminPassword(PASSWORD, PASSWORD), true);

@@ -10,5 +10,6 @@ export type PiPaymentActionPurpose = typeof PiPaymentActionPurpose[keyof typeof 
 
 
 export const PiPaymentActionPurpose = {
-  escrow_service_deposit: 'escrow_service_deposit',
+  listing_ad: 'listing_ad',
+  contract_funding: 'contract_funding',
 } as const;

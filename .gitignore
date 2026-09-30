@@ -1,15 +1,28 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# compiled output
-dist
-tmp
+# Environment files and secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Compiled output and temporary files
+dist/
+build/
+tmp/
 out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
+coverage/
+*.log
+*.tmp
+*.temp
 
 # dependencies
-node_modules
+node_modules/
 
 # IDEs and editors
 /.idea
@@ -30,11 +43,7 @@ node_modules
 # misc
 /.sass-cache
 /connect.lock
-/coverage
 /libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
 /typings
 
 # System Files

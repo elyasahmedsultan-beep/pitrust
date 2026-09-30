@@ -1,14 +1,18 @@
 - [Supabase schema provisioning](supabase-schema-provisioning.md) — REST connector access does not create tables; keep a runnable schema file and handle partially provisioned tables explicitly.
+- [Supabase connector deadlines](supabase-connector-deadlines.md) — connector proxy calls do not accept AbortSignal; use a bounded race and treat timed-out writes as outcome-unknown.
 - [Supabase minimal responses](supabase-minimal-responses.md) — PostgREST writes using `Prefer: return=minimal` can succeed with an empty body; do not unconditionally parse their response as JSON.
 - [PL/pgSQL CASE conditions](plpgsql-case-if.md) — parenthesize CASE expressions inside IF comparisons to avoid THEN-token ambiguity in PL/pgSQL.
 - [Express router mount order](express-router-mount-order.md) — unscoped auth middleware can intercept unrelated routes before route matching falls through.
 - [Dynamic fee settings](dynamic-fee-settings.md) — existing app_settings tables are preserved; deployments must supply both payment fee rows or the API fails closed.
-- [Scoped pnpm installs](scoped-pnpm-installs.md) — the package callback may target the workspace root and reject filters; install artifact-only dependencies with a scoped pnpm command if that happens.
-- [Pi network credential isolation](pi-network-credential-isolation.md) — Testnet and mainnet A2U must use distinct app API keys and wallet seeds, with no cross-network fallback.
+- [Scoped pnpm operations](scoped-pnpm-installs.md) — verify artifact manifests after package callbacks; use scoped pnpm when a callback targets the workspace root or leaves a nested package unchanged.
+- [Pi network credential isolation](pi-network-credential-isolation.md) — platform payment requests use PI_NETWORK_API_KEY; keep A2U payout keys and wallet seeds network-specific.
 - [Pi login and Clerk continuity](pi-login-clerk-continuity.md) — Pi app sessions are primary; keep Clerk for existing Google links and Clerk-only privileged access.
 - [Pi iframe session boundary](pi-iframe-session-boundary.md) — Pi-backed app sessions are Testnet-Sandbox-only, memory-only, canonical-owner-bound, and never arbitrators.
-- [Pi SDK bootstrap and identity](pi-sdk-bootstrap.md) — load the official SDK before interactions; the app URL identity lives in Pi Developer Portal, not `Pi.init`.
+- [Pi SDK bootstrap and identity](pi-sdk-bootstrap.md) — load the official SDK first; incomplete-payment recovery belongs to authenticate, and app URL identity lives in Pi Developer Portal.
+- [Artifact production build environment](artifact-build-env.md) — scoped web-artifact builds may need that artifact's PORT and BASE_PATH; aggregate builds can fail before the target app.
+- [Pi payment finality](pi-payment-finality.md) — require server-verified completion; only cancel when Pi explicitly confirms unverified state, then re-fetch before releasing local records.
 - [Stale artifact workflow processes](workflow-stale-processes.md) — a failed restart can leave an older child server holding the artifact port; stop it, verify the port is free, then restart once.
 - [Pi/Clerk diagnostic privacy](pi-clerk-diagnostic-privacy.md) — redact session IDs in request paths and persist only allowlisted diagnostic fields.
 - [Host-aware API gates](host-aware-api-gates.md) — the Replit path proxy preserves the caller hostname, allowing the API to distinguish direct-site and Sandbox traffic.
 - [GitHub workflow scope](github-workflow-scope.md) — verify the connected GitHub OAuth scopes before adding `.github/workflows`; `repo` alone may not authorize workflow-file changes.
+- [Node strip-types tests](node-strip-types.md) — Node's strip-only test runner cannot parse TypeScript constructor parameter properties; use explicit field assignments.

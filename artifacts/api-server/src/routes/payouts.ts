@@ -4,6 +4,8 @@ import {
   DecideAdminDisputeBody,
   DecideAdminDisputeParams,
   DecideAdminDisputeResponse,
+  RefundTestnetContractToWalletParams,
+  RefundTestnetContractToWalletResponse,
   ReleaseContractToTestnetWalletParams,
   GetContractResponse,
   ListAdminPayoutsResponse,
@@ -20,12 +22,21 @@ import {
   payoutExecutionEnabled,
   type PayoutSnapshot,
 } from "../lib/piA2u";
+import {
+  scanAutoReleaseCandidates,
+  type AutoReleaseCandidate,
+} from "../lib/autoReleaseScan";
 import { authenticatedUserId, requireSession } from "../lib/session";
 import { supabaseRequest } from "../lib/supabase";
 import { getPaymentFeeSettings } from "../lib/appSettings";
 import { requireArbitrator } from "../lib/arbitratorAccess";
 import { hasAdminPasswordSession } from "../lib/adminPasswordAuth";
 import { isTestnetWalletHostAllowed } from "../lib/testnetWalletAccess";
+import { logger } from "../lib/logger";
+import {
+  isValidPiWalletAddress,
+  payoutWalletForPiUid,
+} from "../lib/piWallet";
 
 type PayoutRow = PayoutSnapshot & {
   status: string;
@@ -58,7 +69,12 @@ router.use("/admin", (_req, res, next) => {
   next();
 });
 router.use((req, res, next) => {
-  if (req.path === "/admin" || req.path.startsWith("/admin/")) {
+  if (
+    (req.method === "GET" && req.path === "/listing-ad-fee") ||
+    (req.method === "GET" && (req.path === "/rooms" || req.path === "/chat/rooms")) ||
+    req.path === "/admin" ||
+    req.path.startsWith("/admin/")
+  ) {
     next();
     return;
   }
@@ -103,6 +119,54 @@ async function settlePayout(intent: PayoutSnapshot, paymentId: string, txid: str
   }
 }
 
+async function notifyWalletMismatch(payout: PayoutSnapshot): Promise<void> {
+  try {
+    const contract = await findContract(payout.contract_id);
+    const userId = payout.purpose === "arbitration_refund"
+      ? contract?.buyer_id
+      : contract?.seller_id;
+    if (!userId) return;
+    await supabaseRequest("escrow_notifications", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        user_id: userId,
+        contract_id: payout.contract_id,
+        type: "wallet_mismatch",
+        title: "Payout paused: verify your Pi wallet",
+        message: "The registered Pi UID and G-address no longer match this payout. No transfer was broadcast. Link the correct Pi account and valid G-address, then contact support to resume safely.",
+        dedupe_key: `wallet-mismatch:${payout.id}`,
+      }),
+    });
+  } catch (error) {
+    logger.warn({
+      payoutIntentId: payout.id,
+      errorType: error instanceof Error ? error.name : "unknown",
+    }, "Could not create payout wallet-mismatch notification");
+  }
+}
+
+async function verifyLivePayoutWallet(payout: PayoutSnapshot): Promise<void> {
+  const identity = await payoutWalletForPiUid(payout.recipient_address);
+  if (
+    !identity ||
+    !isValidPiWalletAddress(identity.walletAddress) ||
+    !payout.recipient_wallet_address ||
+    identity.walletAddress !== payout.recipient_wallet_address
+  ) {
+    await notifyWalletMismatch(payout);
+    throw new Error("Registered Pi UID and G-address do not match the persisted payout destination; no A2U transfer was broadcast");
+  }
+}
+
+async function loadPersistedWalletSnapshot(payout: PayoutSnapshot): Promise<void> {
+  const rows = await supabaseRequest<Array<{ recipient_wallet_address: string | null }>>(
+    `escrow_payout_intents?id=eq.${encodeURIComponent(payout.id)}&select=recipient_wallet_address&limit=1`,
+  );
+  payout.recipient_wallet_address = rows[0]?.recipient_wallet_address ?? null;
+  await verifyLivePayoutWallet(payout);
+}
+
 async function settleArbitrationPayout(intentId: string, paymentId: string, txid: string): Promise<void> {
   const rows = await supabaseRequest<Array<{ status: string; contract_id: string }>>(
     "rpc/settle_confirmed_arbitration_payout",
@@ -125,6 +189,7 @@ async function finishVerifiedPayment(
   payout: PayoutRow,
   paymentId: string,
 ): Promise<void> {
+  await verifyLivePayoutWallet(payout);
   if (!payoutExecutionEnabled() || payout.network !== currentPiNetwork()) {
     throw new Error("A2U reconciliation requires an enabled payout on the explicitly selected Pi network");
   }
@@ -162,6 +227,7 @@ async function finishVerifiedArbitrationPayment(
   payout: PayoutRow,
   paymentId: string,
 ): Promise<void> {
+  await verifyLivePayoutWallet(payout);
   if (
     !payoutExecutionEnabled() ||
     !currentPiNetwork() ||
@@ -248,6 +314,7 @@ router.post("/contracts/:id/release", async (req, res): Promise<void> => {
       inviter_reward: prepared.inviter_reward,
       seller_amount: prepared.seller_amount,
       recipient_address: prepared.recipient_uid,
+      recipient_wallet_address: null,
       inviter_id: prepared.inviter_id,
       pi_payment_id: prepared.payment_id,
       txid: prepared.txid,
@@ -266,6 +333,7 @@ router.post("/contracts/:id/release", async (req, res): Promise<void> => {
       return;
     }
 
+    await loadPersistedWalletSnapshot(payout);
     payoutAmountAsNumber(payout.amount);
     payoutAmountAsNumber(payout.platform_fee);
     payoutAmountAsNumber(payout.inviter_reward);
@@ -291,6 +359,10 @@ router.post("/contracts/:id/release", async (req, res): Promise<void> => {
     // network. Re-fetch and verify the platform-owned payment before submitPayment.
     const createdPayment = await sdk.getPayment(paymentId);
     if (!matchesPayoutPayment(createdPayment, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        createdPayment.to_address !== payout.recipient_wallet_address ||
+        createdPayment.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
       await markManual(payout.id);
       res.status(202).json({
         payoutIntentId: payout.id,
@@ -310,6 +382,21 @@ router.post("/contracts/:id/release", async (req, res): Promise<void> => {
       return;
     }
 
+    await verifyLivePayoutWallet(payout);
+    const beforeSubmit = await sdk.getPayment(paymentId);
+    if (!matchesPayoutPayment(beforeSubmit, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        beforeSubmit.to_address !== payout.recipient_wallet_address ||
+        beforeSubmit.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
+      await markManual(payout.id);
+      res.status(202).json({
+        payoutIntentId: payout.id,
+        status: "manual_reconciliation",
+        error: "The live Pi payment recipient no longer matches the registered Pi UID and G-address; no transfer was broadcast",
+      });
+      return;
+    }
     const txid = await sdk.submitPayment(paymentId);
     if (!txid?.trim()) throw new Error("Pi did not return an A2U transaction id");
     await recordTxid(payout.id, paymentId, txid);
@@ -441,6 +528,68 @@ router.post("/contracts/:id/release-wallet", async (req, res): Promise<void> => 
   }
 });
 
+router.post("/contracts/:id/refund-wallet", async (req, res): Promise<void> => {
+  if (!isTestnetWalletHostAllowed(req.hostname)) {
+    res.status(404).json({ error: "Internal Testnet escrow refund is unavailable on this host" });
+    return;
+  }
+  const params = RefundTestnetContractToWalletParams.safeParse({
+    id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
+  });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const actor = authenticatedUserId(req);
+  if (!actor) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  try {
+    const rows = await supabaseRequest<Array<{
+      success: boolean;
+      reason: string;
+      idempotent: boolean;
+      balance: number | string | null;
+      transaction_id: string | null;
+    }>>("rpc/refund_testnet_escrow_to_wallet", {
+      method: "POST",
+      body: JSON.stringify({ p_contract_id: params.data.id, p_user_id: actor }),
+    });
+    const result = rows[0];
+    if (!result) {
+      res.status(503).json({ error: "Testnet refund did not return a database result" });
+      return;
+    }
+    if (!result.success) {
+      const status = result.reason === "contract_not_found" ? 404 :
+        result.reason === "buyer_only" ? 403 : 409;
+      const messages: Record<string, string> = {
+        contract_not_found: "Contract not found",
+        buyer_only: "Only the buyer can request this Testnet refund",
+        contract_not_refundable: "This Testnet escrow cannot be refunded directly in its current state",
+        testnet_funding_required: "This contract was not funded from the Testnet wallet",
+        wallet_not_found: "Buyer Testnet wallet was not found",
+      };
+      res.status(status).json({ error: messages[result.reason] ?? "Could not refund this Testnet escrow" });
+      return;
+    }
+    if (result.balance === null || !result.transaction_id) {
+      res.status(503).json({ error: "Testnet refund confirmation is incomplete" });
+      return;
+    }
+    res.json(RefundTestnetContractToWalletResponse.parse({
+      refunded: true,
+      idempotent: result.idempotent,
+      balance: Number(result.balance),
+      transactionId: result.transaction_id,
+    }));
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to refund escrow to Testnet wallet");
+    res.status(errorStatus(error)).json({ error: "Could not refund this escrow to the Testnet wallet" });
+  }
+});
+
 router.post("/admin/disputes/:id/decide", async (req, res): Promise<void> => {
   if (!await requireArbitrator(req, res)) return;
   const params = DecideAdminDisputeParams.safeParse(req.params);
@@ -550,6 +699,7 @@ router.post("/admin/disputes/:id/decide", async (req, res): Promise<void> => {
       inviter_reward: prepared.inviter_reward,
       seller_amount: prepared.seller_amount,
       recipient_address: prepared.recipient_uid,
+      recipient_wallet_address: null,
       inviter_id: prepared.inviter_id,
       pi_payment_id: prepared.payment_id,
       txid: prepared.txid,
@@ -580,6 +730,7 @@ router.post("/admin/disputes/:id/decide", async (req, res): Promise<void> => {
       return;
     }
 
+    await loadPersistedWalletSnapshot(payout);
     // Never accept a client-supplied contract, recipient, or amount.
     const grossAmount = payoutAmountAsNumber(payout.amount);
     const platformFee = payoutAmountAsNumber(payout.platform_fee);
@@ -612,6 +763,10 @@ router.post("/admin/disputes/:id/decide", async (req, res): Promise<void> => {
 
     const createdPayment = await sdk.getPayment(paymentId);
     if (!matchesPayoutPayment(createdPayment, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        createdPayment.to_address !== payout.recipient_wallet_address ||
+        createdPayment.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
       throw new Error("Pi-created payment does not match the exact arbitration intent");
     }
     const claimedSubmission = await supabaseRequest<boolean>(
@@ -623,6 +778,16 @@ router.post("/admin/disputes/:id/decide", async (req, res): Promise<void> => {
     );
     if (!claimedSubmission) throw new Error("Arbitration payout submission could not be claimed");
 
+    await verifyLivePayoutWallet(payout);
+    const beforeSubmit = await sdk.getPayment(paymentId);
+    if (!matchesPayoutPayment(beforeSubmit, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        beforeSubmit.to_address !== payout.recipient_wallet_address ||
+        beforeSubmit.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
+      await markManual(payout.id);
+      throw new Error("Live Pi payment recipient no longer matches the registered Pi UID and G-address; no transfer was broadcast");
+    }
     const txid = await sdk.submitPayment(paymentId);
     if (!txid?.trim()) throw new Error("Pi did not return an A2U transaction id");
     await recordTxid(payout.id, paymentId, txid);
@@ -866,5 +1031,142 @@ router.post("/admin/payouts/reconcile", async (req, res): Promise<void> => {
     res.status(503).json({ error: "Pi payout reconciliation failed; existing payout intents remain fail-closed" });
   }
 });
+
+async function executeAutoRelease(
+  sdk: ReturnType<typeof createPiA2USdk>,
+  candidate: AutoReleaseCandidate,
+): Promise<void> {
+  const payout: PayoutSnapshot = {
+    id: candidate.intent_id,
+    contract_id: candidate.contract_id,
+    amount: candidate.amount,
+    platform_fee: candidate.platform_fee,
+    inviter_reward: candidate.inviter_reward,
+    seller_amount: candidate.seller_amount,
+    recipient_address: candidate.recipient_uid,
+    recipient_wallet_address: candidate.recipient_wallet_address,
+    inviter_id: candidate.inviter_id,
+    pi_payment_id: candidate.payment_id,
+    txid: candidate.txid,
+    network: candidate.network,
+    purpose: candidate.purpose,
+    dispute_id: candidate.dispute_id,
+  };
+
+  try {
+    await verifyLivePayoutWallet(payout);
+    const amount = payoutAmountAsNumber(payout.seller_amount);
+    const paymentId = await sdk.createPayment({
+      amount,
+      memo: `Escrow automatic release ${payout.contract_id}`,
+      uid: payout.recipient_address,
+      metadata: payoutPaymentMetadata(payout),
+    });
+    if (!paymentId.trim()) throw new Error("Pi did not return an A2U payment id");
+    await supabaseRequest("rpc/store_escrow_payout_payment", {
+      method: "POST",
+      body: JSON.stringify({
+        p_intent_id: payout.id,
+        p_payment_id: paymentId,
+        p_manual: false,
+      }),
+    });
+
+    const createdPayment = await sdk.getPayment(paymentId);
+    if (!matchesPayoutPayment(createdPayment, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        createdPayment.to_address !== payout.recipient_wallet_address ||
+        createdPayment.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
+      await markManual(payout.id);
+      return;
+    }
+    const claimed = await supabaseRequest<boolean>("rpc/claim_escrow_payout_submission", {
+      method: "POST",
+      body: JSON.stringify({ p_intent_id: payout.id }),
+    });
+    if (!claimed) {
+      await markManual(payout.id);
+      return;
+    }
+
+    await verifyLivePayoutWallet(payout);
+    const beforeSubmit = await sdk.getPayment(paymentId);
+    if (!matchesPayoutPayment(beforeSubmit, { ...payout, pi_payment_id: paymentId })) {
+      if (
+        beforeSubmit.to_address !== payout.recipient_wallet_address ||
+        beforeSubmit.user_uid !== payout.recipient_address
+      ) await notifyWalletMismatch(payout);
+      await markManual(payout.id);
+      return;
+    }
+    const txid = await sdk.submitPayment(paymentId);
+    if (!txid?.trim()) throw new Error("Pi did not return an A2U transaction id");
+    await recordTxid(payout.id, paymentId, txid);
+
+    const completing = await supabaseRequest<boolean>("rpc/claim_escrow_payout_completion", {
+      method: "POST",
+      body: JSON.stringify({ p_intent_id: payout.id }),
+    });
+    if (!completing) throw new Error("Automatic payout completion could not be claimed");
+    const completed = await sdk.completePayment(paymentId, txid);
+    const verified = await sdk.getPayment(paymentId);
+    if (
+      !matchesPayoutPayment(completed, { ...payout, pi_payment_id: paymentId }) ||
+      !payoutPaymentIsCompleted(completed, txid) ||
+      !matchesPayoutPayment(verified, { ...payout, pi_payment_id: paymentId }) ||
+      !payoutPaymentIsCompleted(verified, txid)
+    ) {
+      throw new Error("Pi did not confirm the exact completed automatic A2U transaction");
+    }
+    await settlePayout({ ...payout, pi_payment_id: paymentId, txid }, paymentId, txid);
+  } catch (error) {
+    await markManual(payout.id).catch(() => undefined);
+    logger.error({
+      payoutIntentId: payout.id,
+      errorType: error instanceof Error ? error.name : "unknown",
+    }, "Automatic escrow release requires reconciliation");
+  }
+}
+
+export function startAutomaticEscrowReleaseWorker(): () => void {
+  let active = false;
+  let stopped = false;
+
+  const tick = async (): Promise<void> => {
+    if (active || stopped || !payoutExecutionEnabled()) return;
+    const network = currentPiNetwork();
+    if (!network) return;
+    active = true;
+    try {
+      const sdk = createPiA2USdk();
+      await scanAutoReleaseCandidates(
+        () => supabaseRequest<unknown>(
+          "rpc/claim_eligible_escrow_auto_release",
+          {
+            method: "POST",
+            body: JSON.stringify({ p_intent_id: randomUUID(), p_network: network }),
+          },
+        ),
+        (candidate) => executeAutoRelease(sdk, candidate),
+        { shouldStop: () => stopped, maxCandidates: 12 },
+      );
+    } catch (error) {
+      logger.warn({
+        errorType: error instanceof Error ? error.name : "unknown",
+      }, "Automatic escrow release scan did not complete");
+    } finally {
+      active = false;
+    }
+  };
+
+  const timer = setInterval(() => void tick(), 60_000);
+  timer.unref();
+  void tick();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
 
 export default router;

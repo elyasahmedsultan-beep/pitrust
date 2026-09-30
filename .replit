@@ -28,18 +28,10 @@ channel = "stable-25_05"
 
 [userenv.development]
 PI_A2U_ENABLED = "false"
-PI_A2U_TESTNET_ENABLED = "false"
-PI_IFRAME_SESSION_ENABLED = "false"
 PI_MAINNET_HOSTS = "pitrustweb.com,*.pitrustweb.com"
-PI_NETWORK = "mainnet"
-VITE_PI_SANDBOX = "false"
-VITE_PI_SANDBOX_HOST_RULES = "pitrustweb.com=false,*.pitrustweb.com=false,supabase-server-hub.replit.app=false"
+PI_ENV = "mainnet"
 
 [userenv.production]
 PI_A2U_ENABLED = "true"
-PI_A2U_TESTNET_ENABLED = "false"
-PI_IFRAME_SESSION_ENABLED = "false"
 PI_MAINNET_HOSTS = "pitrustweb.com,*.pitrustweb.com"
-PI_NETWORK = "mainnet"
-VITE_PI_SANDBOX = "false"
-VITE_PI_SANDBOX_HOST_RULES = "pitrustweb.com=false,*.pitrustweb.com=false,supabase-server-hub.replit.app=false"
+PI_ENV = "mainnet"

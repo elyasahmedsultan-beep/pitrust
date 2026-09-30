@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ChatMessageSourceLanguage } from './chatMessageSourceLanguage';
 
 export interface ChatMessage {
   id: string;
@@ -12,6 +13,8 @@ export interface ChatMessage {
   senderId: string;
   content: string;
   sourceText: string;
+  /** @nullable */
+  sourceLanguage: ChatMessageSourceLanguage;
   /** @nullable */
   translatedText: string | null;
   /** @nullable */

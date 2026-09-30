@@ -1,12 +1,20 @@
-import type { EscrowServiceDepositIntent, MonthlyBadgeIntent, PaymentIntent } from "@workspace/api-client-react";
-import {
-  DEFAULT_PI_SANDBOX_HOST_RULES,
-  resolvePiSandboxSetting,
-} from "./pi-sandbox-config";
+import type { ListingAdPaymentIntent, MonthlyBadgeIntent, PaymentIntent } from "@workspace/api-client-react";
+import { PI_INIT_OPTIONS, PI_SANDBOX } from "./pi-mainnet-config";
 
-export type PiPayment = { identifier: string; metadata?: Record<string, unknown>; transaction?: { txid?: string } };
+export type PiPayment = {
+  identifier: string;
+  metadata?: Record<string, unknown>;
+  status?: {
+    developer_approved?: boolean;
+    transaction_verified?: boolean;
+    developer_completed?: boolean;
+    cancelled?: boolean;
+    user_cancelled?: boolean;
+  };
+  transaction?: { txid?: string; verified?: boolean };
+};
 export type PiAuth = { accessToken: string; user: { uid: string } };
-type PiIntent = PaymentIntent | MonthlyBadgeIntent | EscrowServiceDepositIntent;
+type PiIntent = PaymentIntent | MonthlyBadgeIntent | ListingAdPaymentIntent;
 
 export type PiRuntimeDiagnostics = {
   appUrl: string;
@@ -25,7 +33,7 @@ export type PiSdkTimingSnapshot = {
 };
 
 export type PiSdk = {
-  init: (options: { version: "2.0" }) => void | Promise<void>;
+  init: (options: { version: "2.0"; sandbox: false }) => void | Promise<void>;
   authenticate: (
     scopes: string[],
     onIncompletePaymentFound: (payment: PiPayment) => void,
@@ -56,11 +64,7 @@ let timingSnapshot: PiSdkTimingSnapshot = {
   authenticateMs: null,
 };
 
-export const PI_SANDBOX = resolvePiSandboxSetting(
-  window.location.hostname,
-  import.meta.env.VITE_PI_SANDBOX,
-  import.meta.env.VITE_PI_SANDBOX_HOST_RULES?.trim() || DEFAULT_PI_SANDBOX_HOST_RULES,
-);
+export { PI_SANDBOX };
 
 function browserLabel(userAgent: string, piBrowserUserAgentMatch: boolean): string {
   if (piBrowserUserAgentMatch) return "Pi Browser (UA match)";
@@ -101,6 +105,11 @@ export function getPiRuntimeDiagnostics(): PiRuntimeDiagnostics {
     inIframe,
     secureContext: window.isSecureContext,
   };
+}
+
+export function isPiBrowserRuntime(): boolean {
+  return typeof navigator !== "undefined" &&
+    /PiBrowser|Pi Browser/i.test(navigator.userAgent);
 }
 
 export function getPiSdkTimingSnapshot(): PiSdkTimingSnapshot {
@@ -230,7 +239,7 @@ export function initializePiSdk(): Promise<PiSdk> {
       const startedAt = performance.now();
       logPiDiagnosticEvent("pi-init-start", { source: "Pi.init" });
       try {
-        await pi.init({ version: "2.0" });
+        await pi.init(PI_INIT_OPTIONS);
       } catch (error) {
         const durationMs = performance.now() - startedAt;
         timingSnapshot = { ...timingSnapshot, piInitMs: Math.round(durationMs) };

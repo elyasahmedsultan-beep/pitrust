@@ -1,5 +1,5 @@
 import { MessageCircle, RefreshCw, ShieldCheck } from 'lucide-react';
-import { useListPublicChatRooms, getListPublicChatRoomsQueryKey } from '@workspace/api-client-react';
+import { useListPublicChatRoomsAlias, getListPublicChatRoomsAliasQueryKey } from '@workspace/api-client-react';
 import { Link } from 'wouter';
 import { useI18n } from '@/i18n';
 
@@ -13,7 +13,7 @@ const languageNames: Record<string, Record<string, string>> = {
 
 export default function ChatRoomsPage() {
   const { language, t } = useI18n();
-  const rooms = useListPublicChatRooms({ query: { queryKey: getListPublicChatRoomsQueryKey(), retry: 1 } });
+  const rooms = useListPublicChatRoomsAlias({ query: { queryKey: getListPublicChatRoomsAliasQueryKey(), retry: 1 } });
   const roomItems = rooms.data ?? [];
 
   if (rooms.isLoading) {

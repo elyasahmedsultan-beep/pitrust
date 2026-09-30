@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { setAdditionalHeadersGetter, setAuthTokenGetter } from "@workspace/api-client-react";
+import { getPiAppAccessToken } from "@/lib/pi-app-session";
 
 export type PiIframeIdentity = {
   uid: string;
@@ -73,7 +74,7 @@ export function PiIframeSessionProvider({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
   }, [queryClient]);
 
-  setAuthTokenGetter(getPiIframeSessionToken);
+  setAuthTokenGetter(() => getPiIframeSessionToken() ?? getPiAppAccessToken());
   setAdditionalHeadersGetter(getPiIframeAdminHeaders);
 
   useEffect(() => {

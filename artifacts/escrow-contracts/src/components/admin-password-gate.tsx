@@ -8,7 +8,15 @@ import { useI18n } from '@/i18n';
 import { Form } from '@/components/ui/form';
 import { usePiIframeSession } from '@/lib/pi-iframe-session';
 
-export default function AdminPasswordGate() {
+type AdminPasswordGateProps = {
+  sessionCheckFailed?: boolean;
+  onRetrySessionCheck?: () => void;
+};
+
+export default function AdminPasswordGate({
+  sessionCheckFailed = false,
+  onRetrySessionCheck,
+}: AdminPasswordGateProps) {
   const { language, direction } = useI18n();
   const queryClient = useQueryClient();
   const createSession = useCreateAdminSession();
@@ -26,9 +34,11 @@ export default function AdminPasswordGate() {
         submit: 'فتح لوحة الإدارة',
         submitting: 'جارٍ التحقق…',
         invalid: 'كلمة المرور غير صحيحة.',
-        unavailable: 'مصادقة كلمة مرور الإدارة غير مهيأة. أضف ADMIN_SECRET_PASSWORD وجرّب مجددًا.',
+        unavailable: 'مصادقة كلمة مرور الإدارة غير مهيأة. أضف ADMIN_PASSWORD وجرّب مجددًا.',
         limited: 'محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.',
         generic: 'تعذر تسجيل الدخول. حاول مجددًا.',
+        sessionCheckFailed: 'تعذر التحقق من جلسة الإدارة الآن. يمكنك المحاولة بكلمة المرور أو إعادة فحص الجلسة.',
+        retrySessionCheck: 'إعادة فحص الجلسة',
         home: 'العودة إلى PiTrust',
       }
     : {
@@ -40,9 +50,11 @@ export default function AdminPasswordGate() {
         submit: 'Open admin desk',
         submitting: 'Verifying…',
         invalid: 'The password was not accepted.',
-        unavailable: 'Admin password authentication is not configured. Add ADMIN_SECRET_PASSWORD and try again.',
+        unavailable: 'Admin password authentication is not configured. Add ADMIN_PASSWORD and try again.',
         limited: 'Too many attempts. Wait a while, then try again.',
         generic: 'Could not sign in. Please try again.',
+        sessionCheckFailed: 'The admin session could not be checked. You can still try the password or retry the session check.',
+        retrySessionCheck: 'Retry session check',
         home: 'Back to PiTrust',
       };
 
@@ -77,6 +89,21 @@ export default function AdminPasswordGate() {
           </div>
           <h1 id="admin-password-title" className="mt-5 font-['Syne'] text-2xl font-semibold">{copy.title}</h1>
           <p className="mt-3 text-sm leading-7 text-[#a6b7aa]">{copy.description}</p>
+          {sessionCheckFailed && (
+            <div className="mt-4 rounded-lg border border-[#594c33] bg-[#241f16] p-3 text-xs leading-5 text-[#e4c795]" role="status">
+              <p>{copy.sessionCheckFailed}</p>
+              {onRetrySessionCheck && (
+                <button
+                  type="button"
+                  className="mt-2 font-semibold underline underline-offset-4"
+                  onClick={onRetrySessionCheck}
+                  data-testid="button-retry-admin-session-check"
+                >
+                  {copy.retrySessionCheck}
+                </button>
+              )}
+            </div>
+          )}
           <Form {...form}>
             <form className="mt-7 space-y-4" onSubmit={submit}>
               <label className="admin-label block" htmlFor="admin-secret-password">{copy.password}</label>
